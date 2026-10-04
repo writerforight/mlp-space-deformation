@@ -209,7 +209,14 @@
         <option value="pins">pinned points</option>
       </select></div>
     <div class="row" id="datasetRow"><label data-tip="Two-class dataset: blue is class 1, red is class 2.">Data</label>
-      <select id="dataset"><option value="moons">two moons</option><option value="circles">circles</option><option value="spirals">spirals</option></select></div>
+      <select id="dataset">
+        <optgroup label="Easy"><option value="blobs">two blobs (already separable)</option><option value="moons">two moons</option><option value="circles">disk inside a ring</option></optgroup>
+        <optgroup label="Harder"><option value="xor">XOR</option><option value="wave">wavy boundary</option><option value="rings">three rings</option></optgroup>
+        <optgroup label="Hard"><option value="spirals">spirals</option><option value="checker">checkerboard</option><option value="linked">linked rings (3D)</option></optgroup>
+        <optgroup label="Your own"><option value="custom">paint your own (2D)</option></optgroup>
+      </select></div>
+    <div class="note" id="datasetNote"></div>
+    <div class="btns" id="customRow"><button id="clearCustom" data-tip="Remove all painted points.">Clear painted points</button><span class="tag" id="customCount"></span></div>
     <div class="row" id="transformRow"><label data-tip="The linear map A the network should learn: x ↦ A·x.">Map</label>
       <select id="transform"><option value="rotation">rotation</option><option value="shear">shear</option><option value="scaling">scaling</option></select></div>
     <div class="row" id="amountRow"><label data-tip="Angle (rotation, radians), shear factor, or scale factor of the target transform.">Amount</label>

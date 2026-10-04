@@ -35,7 +35,9 @@ Three.js (from a CDN) is used only to draw the 3D view.
   - **match a linear map** (rotation, shear, scaling) with MSE;
   - **pinned points**: drag from an input point to where its output should go.
 
-  Datasets: two moons, circles, spirals. SGD or Adam, batch size, learning rate, steps per frame,
+  Datasets, from easy to hard: two blobs (already linearly separable), two moons, a disk inside a ring,
+  XOR, a wavy boundary, three nested rings, spirals, a checkerboard, **linked rings** (3D) — and
+  **paint your own** with a blue/red brush. SGD or Adam, batch size, learning rate, steps per frame,
   redraw interval, loss curve and accuracy.
 - **Continual learning.** Sequential mode trains on one target (pin, or a chunk of the dataset) at a
   time. Anti-forgetting: replay buffer, orthogonal gradient projection (OGD) or an EWC penalty.
@@ -99,6 +101,18 @@ When the task is to send each class to its own point, the network must do someth
 drastic: squash each class onto a single point (the Jacobian there tends to zero, `det J ≈ 0`) while
 tearing the classes apart in between (large `‖J‖` near the decision boundary). With width 2 the whole
 plane typically ends up folded onto the segment between the two target points.
+
+### Topology: why width matters
+
+A layer whose weight matrix is invertible, followed by tanh or sigmoid, is a continuous map with a
+continuous inverse — it can bend and stretch space but never tear or glue it. Such maps cannot change
+how shapes are arranged *topologically*. A disk inside a ring stays inside it in the plane, and two
+**linked rings** stay linked in 3D, so no stack of invertible width-d layers can pull them apart.
+The app shows both escape routes. With width 3 the network can only get close to separating the
+linked rings by making a weight matrix (nearly) singular — crushing a dimension, which the
+Invertibility panel flags as "rank-deficient". It still plateaus around 98% accuracy. With width 4 it
+uses the extra dimension to unlink them cleanly (100%, loss → 0). This is the argument of Chris Olah's
+essay *Neural Networks, Manifolds, and Topology* (2014), made interactive.
 
 ### The Jacobian: the local picture
 

@@ -429,27 +429,76 @@
   // Datasets and target transforms
   // ===========================================================================
 
-  /** Two-class toy datasets.  Returns [{ x, y }] with y ∈ {0, 1}. dim = 2 or 3. */
+  /**
+   * Two-class toy datasets.  Returns [{ x, y }] with y ∈ {0, 1} (classes alternate, so they are balanced).
+   * dim = 2 or 3.  Kinds:
+   *   blobs    two Gaussian clouds — already linearly separable (the network barely needs to bend space)
+   *   moons    two interleaving half-circles
+   *   circles  a disk inside a ring (3D: a ball inside a shell)
+   *   rings    blue–red–blue nested rings: the middle ring needs two folds
+   *   xor      opposite quadrants share a class (3D: octants by sign parity) — needs a fold
+   *   checker  checkerboard (4×4 in 2D, 3×3×3 in 3D) — many regions, tests capacity
+   *   wave     a wavy (sine) boundary
+   *   spirals  two interleaved spiral arms
+   *   linked   (3D) two interlocked rings — a Hopf link: no continuous invertible map of 3D space can
+   *            pull them apart.  A width-3 network only gets close by making a weight matrix (nearly)
+   *            singular — crushing a dimension — and still plateaus; with width ≥ 4 it separates them cleanly.
+   */
   function makeDataset(kind, n, dim, rng, noise = 0.08) {
     const out = [];
     const jitter = () => noise * rng.normal();
+    const box = (e) => [...Array(dim)].map(() => rng.uniform(-e, e));
+    // rejection sampling for region-defined datasets: a point of class `want`, at least `gap` from the boundary
+    const region = (want, rule, e = 1.6, gap = 0.06) => {
+      for (let k = 0; k < 20000; k++) {
+        const p = box(e), r = rule(p);
+        if (r.label === want && r.margin >= gap) return p;
+      }
+      return box(e);
+    };
+    if (kind === 'linked' && dim === 2) kind = 'rings';   // the link only exists in 3D
     for (let i = 0; i < n; i++) {
       const c = i % 2;
       let p;
-      if (kind === 'moons') {
+      if (kind === 'blobs') {
+        const m = c === 0 ? [0.8, 0.5, 0.4] : [-0.8, -0.5, -0.4];
+        p = [...Array(dim)].map((_, k) => m[k] + 0.35 * rng.normal());
+      } else if (kind === 'moons') {
         const t = Math.PI * rng.next();
         p = c === 0 ? [Math.cos(t) - 0.5, Math.sin(t) - 0.25] : [0.5 - Math.cos(t), 0.25 - Math.sin(t)];
         p = [p[0] * 1.2 + jitter(), p[1] * 1.2 + jitter()];
         if (dim === 3) p.push(0.3 * jitter());
-      } else if (kind === 'circles') {
-        const r = c === 0 ? 0.5 : 1.3;
-        if (dim === 3) {                         // concentric spherical shells
+      } else if (kind === 'circles' || kind === 'rings') {
+        // circles: disk (blue) inside ring (red); rings: blue / red / blue
+        const r = kind === 'circles' ? (c === 0 ? 0.5 : 1.3) : (c === 1 ? 0.95 : (rng.next() < 0.4 ? 0.4 : 1.5));
+        if (dim === 3) {                         // spherical shells
           const u = 2 * rng.next() - 1, phi = 2 * Math.PI * rng.next(), s = Math.sqrt(1 - u * u);
           p = [r * s * Math.cos(phi) + jitter(), r * s * Math.sin(phi) + jitter(), r * u + jitter()];
         } else {
           const t = 2 * Math.PI * rng.next();
           p = [r * Math.cos(t) + jitter(), r * Math.sin(t) + jitter()];
         }
+      } else if (kind === 'xor') {
+        p = region(c, (q) => ({ label: q.reduce((s, v) => s * Math.sign(v), 1) > 0 ? 0 : 1, margin: Math.min(...q.map(Math.abs)) }), 1.5, 0.1);
+      } else if (kind === 'checker') {
+        const cells = dim === 2 ? 4 : 3, e = dim === 2 ? 1.6 : 1.5, w = (2 * e) / cells;
+        p = region(c, (q) => {
+          let sum = 0, margin = Infinity;
+          for (const v of q) {
+            const u = (v + e) / w, k = Math.min(cells - 1, Math.floor(u));
+            sum += k; margin = Math.min(margin, w * Math.min(u - k, k + 1 - u));
+          }
+          return { label: sum % 2, margin };
+        }, e, 0.05);
+      } else if (kind === 'wave') {
+        const f = (q) => (dim === 2 ? q[1] - 0.6 * Math.sin(2.4 * q[0]) : q[2] - 0.6 * Math.sin(2 * q[0]) * Math.cos(2 * q[1]));
+        p = region(c, (q) => ({ label: f(q) > 0 ? 0 : 1, margin: Math.abs(f(q)) }), 1.6, 0.08);
+      } else if (kind === 'linked') {
+        // ring 0 in the xy-plane around (−0.5, 0, 0); ring 1 in the xz-plane around (0.5, 0, 0):
+        // each ring passes through the other's centre, so they are linked
+        const t = 2 * Math.PI * rng.next();
+        p = c === 0 ? [-0.5 + Math.cos(t), Math.sin(t), 0] : [0.5 - Math.cos(t), 0, Math.sin(t)];
+        p = p.map((v) => v + jitter());
       } else { // spirals: two interleaved arms
         const t = 0.25 + 2.6 * rng.next();
         const r = 0.25 + 0.55 * t;

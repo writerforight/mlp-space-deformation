@@ -34,6 +34,7 @@
       train: { target: 'none', dataset: 'moons', transform: 'rotation', amount: 0.9, optimizer: 'adam', lr: 0.01, batch: 32, stepsPerFrame: 5,
         redrawEvery: 10, mode: 'joint', stepsPerTask: 300, nTasks: 3, method: 'none', lambda: 100 },
       pins: [],
+      custom: [],          // painted points for the "paint your own" dataset: [{ x, label }]
       probe: dim === 2 ? [0.5, 0.3] : [0.5, 0.3, 0.2],
       analysis: { matrix: 'cosine', eps: 0.1 },
       sphere: { c: [0, 0, 0], r: 0.6 },
@@ -135,8 +136,9 @@
     const rng = new NN.Rng(S.net.init.seed * 101 + 5);
     targetA = null;
     if (usesClasses()) {
-      data = NN.makeDataset(S.train.dataset, 400, S.dim, rng).map((s) => ({
-        x: s.x, label: s.y, y: isAnchors() ? anchor(s.y) : s.y }));
+      const raw = S.train.dataset === 'custom' ? S.custom.map((p) => ({ x: Float64Array.from(p.x), y: p.label }))
+        : NN.makeDataset(S.train.dataset, 400, S.dim, rng);
+      data = raw.map((s) => ({ x: s.x, label: s.y, y: isAnchors() ? anchor(s.y) : s.y }));
     } else if (isTransform()) {
       targetA = NN.targetMatrix(S.train.transform, S.dim, S.train.amount);
       data = NN.makeTransformData(targetA, 300, S.dim, rng);
@@ -674,17 +676,27 @@
     ['probe', 'Probe', 'Click on the z = 0 plane to choose the analysed point.'],
   ];
 
+  const PAINT_TOOLS = [
+    ['paint0', 'Paint blue', 'Drag to spray blue (class 1) training points.'],
+    ['paint1', 'Paint red', 'Drag to spray red (class 2) training points.'],
+  ];
+  function toolList() {
+    if (S.dim === 3) return TOOLS3;
+    return usesClasses() && S.train.dataset === 'custom' ? TOOLS2.concat(PAINT_TOOLS) : TOOLS2;
+  }
+
   function renderToolbar() {
     const tb = $('toolbar');
     tb.innerHTML = '';
-    for (const [id, label, tip] of S.dim === 2 ? TOOLS2 : TOOLS3) {
+    if (!toolList().some((x) => x[0] === tool)) tool = 'pan';
+    for (const [id, label, tip] of toolList()) {
       const b = document.createElement('button');
       b.textContent = label; b.dataset.tip = tip;
       b.className = tool === id ? 'on' : '';
       b.onclick = () => setTool(id);
       tb.appendChild(b);
     }
-    const tip = (S.dim === 2 ? TOOLS2 : TOOLS3).find((x) => x[0] === tool);
+    const tip = toolList().find((x) => x[0] === tool);
     $('hint').textContent = tip ? tip[2] : '';
     $('toolNote').textContent = S.dim === 2 ? 'Draw with the tools on top of the view.' : 'Add spheres here or draw on a sphere with the toolbar.';
   }
@@ -695,7 +707,7 @@
       if (S.train.target !== 'pins') { S.train.target = 'pins'; $('target').value = 'pins'; onTargetChange(); }
       if (traces) animateTo(traces.nStages - 1);
     }
-    if (id === 'curve' || id === 'circle' || id === 'region' || id === 'sphereDraw' || id === 'probe') animateTo(0);
+    if (['curve', 'circle', 'region', 'sphereDraw', 'probe', 'paint0', 'paint1'].includes(id)) animateTo(0);
     renderToolbar();
   }
 
@@ -762,6 +774,8 @@
     } else if (d.type === 'pin') {
       S.pins.push({ x: d.x, y: d.y });
       onPinsChanged();
+    } else if (d.type === 'paint') {
+      rebuildTrainer();
     }
   }
 
@@ -790,9 +804,14 @@
       else if (tool === 'circle') { t = 0; anim = null; drawing = { type: 'circle', c: w, r: 0 }; }
       else if (tool === 'pin') drawing = { type: 'pin', x: w, y: w.slice() };
       else if (tool === 'probe') { S.probe = w; invalidate(); }
+      else if (tool === 'paint0' || tool === 'paint1') { t = 0; anim = null; drawing = { type: 'paint', label: +tool.slice(-1), last: w }; spray(w, drawing.label); }
     });
     cv.addEventListener('pointermove', (e) => {
       const r = cv.getBoundingClientRect(), w = viz2.toWorld(e.clientX - r.left, e.clientY - r.top);
+      if (drawing && drawing.type === 'paint') {
+        if (Math.hypot(w[0] - drawing.last[0], w[1] - drawing.last[1]) * viz2.scale > 6) { spray(w, drawing.label); drawing.last = w; }
+        return;
+      }
       if (pan) { viz2.panBy(e.clientX - pan.x, e.clientY - pan.y); pan.x = e.clientX; pan.y = e.clientY; userMovedView(); return; }
       if (!drawing) return;
       if (drawing.type === 'circle') drawing.r = Math.hypot(w[0] - drawing.c[0], w[1] - drawing.c[1]);
@@ -811,6 +830,15 @@
       viz2.zoomAt(e.clientX - r.left, e.clientY - r.top, Math.exp(-wheelPixels(e) * 0.0015));
       userMovedView();
     }, { passive: false });
+  }
+
+  /** Spray a few training points of one class around a world position (the "paint your own" dataset). */
+  function spray(w, label) {
+    const g = () => { let u = 0; while (!u) u = Math.random(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * Math.random()); };
+    for (let k = 0; k < 3 && S.custom.length < 1500; k++) S.custom.push({ x: [w[0] + 0.06 * g(), w[1] + 0.06 * g()], label });
+    buildData();
+    syncTargetUI();
+    invalidate();
   }
 
   /** Manual zoom / pan wins over auto-fit (otherwise auto-fit would undo it on the next frame). */
@@ -910,7 +938,33 @@
     return range ? ` ⚠ The output layer uses ${act} (range ${range}), so some targets are out of reach — tick “Linear output layer” or press ★ Recommended.` : '';
   }
 
+  const DATASET_NOTES = {
+    blobs: 'Two separate clouds: one straight line already splits them, so the network hardly needs to bend space.',
+    moons: 'Two interleaving half-moons: one bend is enough.',
+    circles: 'A disk inside a ring: no line separates them, and no smooth invertible bending of the plane can move the disk out of the ring — the network has to squash space or lift the disk into an extra dimension (width ≥ 3).',
+    rings: 'Blue–red–blue rings: separating the middle ring takes two folds.',
+    xor: 'XOR: opposite quadrants share a colour (3D: octants by sign). No single line works — the network must fold space.',
+    wave: 'A wavy boundary: smooth but curved. Try sin activations.',
+    spirals: 'Two interleaved spirals: many folds are needed — use more layers or width.',
+    checker: 'Checkerboard: many small regions — a test of capacity (width × depth).',
+    linked: 'Two linked rings. No smooth invertible deformation of 3D space can unlink them: with width 3 the network only gets close by crushing a dimension (see Invertibility); width ≥ 4 separates them cleanly.',
+    custom: 'Paint your own data with “Paint blue” / “Paint red” in the toolbar (drag to spray points).',
+  };
+
   function syncTargetUI() {
+    // datasets that only exist in one dimension
+    const sel = $('dataset');
+    sel.querySelector('option[value="linked"]').hidden = S.dim !== 3;
+    sel.querySelector('option[value="custom"]').hidden = S.dim !== 2;
+    if ((S.train.dataset === 'linked' && S.dim !== 3) || (S.train.dataset === 'custom' && S.dim !== 2)) {
+      S.train.dataset = 'moons'; sel.value = 'moons';
+    }
+    const custom = usesClasses() && S.train.dataset === 'custom';
+    $('datasetNote').classList.toggle('hidden', !usesClasses());
+    $('datasetNote').textContent = DATASET_NOTES[S.train.dataset] || '';
+    $('customRow').classList.toggle('hidden', !custom);
+    $('customCount').textContent = `${S.custom.filter((p) => p.label === 0).length} blue · ${S.custom.filter((p) => p.label === 1).length} red`;
+    $('clearCustom').disabled = !S.custom.length;
     $('datasetRow').classList.toggle('hidden', !usesClasses());
     $('transformRow').classList.toggle('hidden', !isTransform());
     $('amountRow').classList.toggle('hidden', !isTransform());
@@ -1075,7 +1129,8 @@
     $('resetView').onclick = () => { viz2.cx = viz2.cy = 0; viz2.scale = Math.min(viz2.w, viz2.h) / 6; if (viz3) { viz3.orbit = { theta: 0.8, phi: 1.1, radius: 7 }; viz3.target.set(0, 0, 0); } };
 
     $('target').onchange = (e) => { S.train.target = e.target.value; training = false; onTargetChange(); };
-    $('dataset').onchange = (e) => { S.train.dataset = e.target.value; training = false; rebuildTrainer(); invalidate(); };
+    $('dataset').onchange = (e) => { S.train.dataset = e.target.value; training = false; rebuildTrainer(); syncTargetUI(); renderToolbar(); invalidate(); };
+    $('clearCustom').onclick = () => { training = false; S.custom = []; rebuildTrainer(); syncTargetUI(); invalidate(); };
     $('transform').onchange = (e) => { S.train.transform = e.target.value; training = false; rebuildTrainer(); invalidate(); };
     $('optimizer').onchange = (e) => { S.train.optimizer = e.target.value; trainer.setOpts({ optimizer: e.target.value }); };
     $('method').onchange = (e) => { S.train.method = e.target.value; trainer.setOpts({ method: e.target.value }); syncModeUI(); };
@@ -1125,7 +1180,8 @@
     const d = S.dim, T = S.train;
     let arch;
     if (T.target === 'anchors' || T.target === 'classify') {
-      arch = { moons: [4, d], circles: [4, d === 3 ? 6 : 4], spirals: [6, 6] }[T.dataset];
+      arch = { blobs: [2, d], moons: [4, d], circles: [4, d === 3 ? 6 : 4], rings: [5, 6], xor: [3, 4], wave: [4, 6],
+        spirals: [6, 6], checker: [6, 8], linked: [4, 4], custom: [5, 6] }[T.dataset] || [4, 6];
     } else if (T.target === 'transform') arch = [2, 4];
     else if (T.target === 'pins') arch = [3, 6];
     else arch = [3, d];

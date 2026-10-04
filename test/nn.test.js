@@ -130,6 +130,28 @@ for (const act of NN.ACTIVATION_NAMES) {
   check('OGD-projected gradient is orthogonal to old output gradients', Math.max(...J.map((r) => Math.abs(NN.dot(r, g)))) < 1e-10);
 }
 
+// 5b) datasets: balanced, finite, and the rule-based ones obey their rule
+{
+  for (const dim of [2, 3]) {
+    for (const k of ['blobs', 'moons', 'circles', 'rings', 'xor', 'checker', 'wave', 'spirals', 'linked']) {
+      const d = NN.makeDataset(k, 200, dim, new NN.Rng(4));
+      const ok = d.length === 200 && d.every((s) => s.x.length === dim && s.x.every(Number.isFinite))
+        && d.filter((s) => s.y === 0).length === 100;
+      if (!ok) check(`dataset ${k} ${dim}D`, false);
+    }
+  }
+  const xor = NN.makeDataset('xor', 200, 2, new NN.Rng(1));
+  check('xor labels follow the sign rule', xor.every((s) => (s.x[0] * s.x[1] > 0 ? 0 : 1) === s.y));
+  const x3 = NN.makeDataset('xor', 200, 3, new NN.Rng(1));
+  check('3D xor labels follow sign parity', x3.every((s) => (s.x[0] * s.x[1] * s.x[2] > 0 ? 0 : 1) === s.y));
+  // linked rings: ring 0 pierces the disk of ring 1 and vice versa (that's what makes them a link)
+  const L = NN.makeDataset('linked', 400, 3, new NN.Rng(2), 0);
+  const r0 = L.filter((s) => s.y === 0), r1 = L.filter((s) => s.y === 1);
+  const crosses = (ring, plane, centre) => ring.some((s) => Math.abs(s.x[plane]) < 0.02 && Math.hypot(...[0, 1, 2].filter((k) => k !== plane).map((k) => s.x[k] - centre[k])) < 1);
+  check('linked rings pierce each other', crosses(r0, 1, [0.5, 0, 0]) && crosses(r1, 2, [-0.5, 0, 0]));
+  check('all datasets generated', true);
+}
+
 // 6) analysis helpers
 {
   const net = new NN.MLP([2, 2, 2], ['relu', 'identity']).init('normal', 1, new NN.Rng(7));
