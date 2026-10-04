@@ -193,15 +193,21 @@
       <button id="resetView" data-tip="Back to the default zoom.">Reset view</button></div>
 
     <h2>Training</h2>
-    <div class="row"><label data-tip="What the network is trained to do.">Target</label>
+    <div class="row"><label data-tip="What the network is trained to do.">Task</label>
       <select id="target">
-        <option value="none">none</option>
-        <optgroup label="Classify (cross-entropy)"><option value="moons">two moons</option><option value="circles">circles</option><option value="spirals">spirals</option></optgroup>
-        <optgroup label="Match a transform (MSE)"><option value="rotation">rotation</option><option value="shear">shear</option><option value="scaling">scaling</option></optgroup>
-        <optgroup label="Pin points (MSE)"><option value="pins">pinned points</option></optgroup>
+        <option value="none">none (just look)</option>
+        <option value="anchors">send each class to a point</option>
+        <option value="classify">separate classes (logits)</option>
+        <option value="transform">match a linear map</option>
+        <option value="pins">pinned points</option>
       </select></div>
+    <div class="row" id="datasetRow"><label data-tip="Two-class dataset: blue is class 1, red is class 2.">Data</label>
+      <select id="dataset"><option value="moons">two moons</option><option value="circles">circles</option><option value="spirals">spirals</option></select></div>
+    <div class="row" id="transformRow"><label data-tip="The linear map A the network should learn: x ↦ A·x.">Map</label>
+      <select id="transform"><option value="rotation">rotation</option><option value="shear">shear</option><option value="scaling">scaling</option></select></div>
     <div class="row" id="amountRow"><label data-tip="Angle (rotation, radians), shear factor, or scale factor of the target transform.">Amount</label>
       <input id="amount" type="range" min="-3" max="3" step="0.05"><span class="val" id="amountVal"></span></div>
+    <div class="note" id="targetNote"></div>
     <div class="row"><label data-tip="SGD: θ ← θ − lr·g.  Adam: per-parameter steps from running averages of g and g².">Optimizer</label>
       <select id="optimizer"><option value="adam">Adam</option><option value="sgd">SGD</option></select></div>
     <div class="row"><label data-tip="Step size (log scale).">Learning rate</label>

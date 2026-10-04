@@ -13,7 +13,7 @@
   const $ = (id) => document.getElementById(id);
   const ACTS = NN.ACTIVATION_NAMES;
   const PALETTE = ['#58a6ff', '#f78166', '#d2a8ff', '#3fb950', '#ffa657', '#ff7b72', '#79c0ff', '#e3b341'];
-  const CLASS_COLORS = ['#58a6ff', '#ffa657'];
+  const CLASS_COLORS = ['#58a6ff', '#ff6b6b'];   // class 1 = blue, class 2 = red
   const BASIS_COLORS = ['#ff6b6b', '#51cf66', '#4dabf7'];
   const GRID_COLOR = 'rgba(150,160,180,0.35)';
   const STATE_VERSION = 1;
@@ -31,7 +31,7 @@
       objects: [],
       nPoints: 300,
       display: { grid: true, circle: true, basis: true, origin: true, jac: false, det: false, dist: false, autoFit: true },
-      train: { target: 'none', amount: 0.9, optimizer: 'adam', lr: 0.01, batch: 32, stepsPerFrame: 5,
+      train: { target: 'none', dataset: 'moons', transform: 'rotation', amount: 0.9, optimizer: 'adam', lr: 0.01, batch: 32, stepsPerFrame: 5,
         redrawEvery: 10, mode: 'joint', stepsPerTask: 300, nTasks: 3, method: 'none', lambda: 100 },
       pins: [],
       probe: dim === 2 ? [0.5, 0.3] : [0.5, 0.3, 0.2],
@@ -99,15 +99,45 @@
   // Training targets and trainer
   // ===========================================================================
 
-  const isClassify = () => ['moons', 'circles', 'spirals'].includes(S.train.target);
-  const isTransform = () => ['rotation', 'shear', 'scaling'].includes(S.train.target);
+  /*
+   * Training tasks:
+   *   anchors   — send every blue point to (1, 0[, 0]) and every red point to (−1, 0[, 0])  (MSE)
+   *   classify  — two output logits, cross-entropy                                         (CE)
+   *   transform — every x should go to A·x for a fixed rotation / shear / scaling A         (MSE)
+   *   pins      — user-dragged input → output pairs                                        (MSE)
+   */
+  const isClassify = () => S.train.target === 'classify';
+  const isAnchors = () => S.train.target === 'anchors';
+  const isTransform = () => S.train.target === 'transform';
+  const usesClasses = () => isClassify() || isAnchors();
+
+  /** Target point of a class for the "anchors" task: blue → +e1, red → −e1. */
+  function anchor(c) {
+    const v = new Float64Array(S.dim);
+    v[0] = c === 0 ? 1 : -1;
+    return v;
+  }
+
+  /** Fraction of samples on the right side: argmax of the logits, or the nearer anchor. */
+  function accuracy() {
+    if (!usesClasses() || !data.length) return null;
+    let ok = 0;
+    for (const s of data) {
+      const o = net.predict(s.x);
+      const pred = isClassify() ? (o[1] > o[0] ? 1 : 0) : (o[0] >= 0 ? 0 : 1);
+      if (pred === s.label) ok++;
+    }
+    return ok / data.length;
+  }
 
   function buildData() {
-    const tg = S.train.target, rng = new NN.Rng(S.net.init.seed * 101 + 5);
+    const rng = new NN.Rng(S.net.init.seed * 101 + 5);
     targetA = null;
-    if (isClassify()) data = NN.makeDataset(tg, 400, S.dim, rng);
-    else if (isTransform()) {
-      targetA = NN.targetMatrix(tg, S.dim, S.train.amount);
+    if (usesClasses()) {
+      data = NN.makeDataset(S.train.dataset, 400, S.dim, rng).map((s) => ({
+        x: s.x, label: s.y, y: isAnchors() ? anchor(s.y) : s.y }));
+    } else if (isTransform()) {
+      targetA = NN.targetMatrix(S.train.transform, S.dim, S.train.amount);
       data = NN.makeTransformData(targetA, 300, S.dim, rng);
     } else data = [];
   }
@@ -215,8 +245,8 @@
 
   function allDrawables() {
     const ds = referenceDrawables().concat(userDrawables());
-    if (isClassify() && data.length) {
-      ds.push({ id: 'data', role: 'data', kind: 'points', size: 2.4, colors: data.map((s) => CLASS_COLORS[s.y]), pts: data.map((s) => s.x) });
+    if (usesClasses() && data.length) {
+      ds.push({ id: 'data', role: 'data', kind: 'points', size: 2.4, colors: data.map((s) => CLASS_COLORS[s.label]), pts: data.map((s) => s.x) });
     }
     if (S.pins.length) ds.push({ id: 'pins', role: 'pins', kind: 'points', pts: S.pins.map((p) => Float64Array.from(p.x)) });
     ds.push({ id: 'probe', role: 'probe', kind: 'points', pts: [Float64Array.from(S.probe)] });
@@ -366,7 +396,7 @@
         distMax = Math.max(distMax, Math.sqrt(s));
       }
     }
-    if (vd === 2 && isClassify() && tt < 0.5) items.push(backgroundImage());
+    if (vd === 2 && usesClasses() && tt < 0.5) items.push(backgroundImage());
     for (const d of traces.ds) {
       if (d.role === 'jac' || d.role === 'probe' || d.role === 'pins') continue;
       const p = posCache.get(d);
@@ -399,6 +429,17 @@
       const M = 1e3;
       items.push({ kind: 'line', pts: Float64Array.from([-M, -M, M, M]), color: '#e6edf3', alpha: 0.5, dash: [6, 6], width: 1.2, noFit: true });
       items.push({ kind: 'label', p: [0.6, 0.6], text: 'decision boundary (logit₁ = logit₂)', color: '#8b949e' });
+    }
+    // the two target points of the "anchors" task, and the line halfway between them
+    if (atOutput && isAnchors()) {
+      if (vd === 2) {
+        items.push({ kind: 'line', pts: Float64Array.from([0, -1e3, 0, 1e3]), color: '#e6edf3', alpha: 0.35, dash: [6, 6], width: 1.2, noFit: true });
+      }
+      [0, 1].forEach((c) => {
+        const a = Array.from(anchor(c));
+        items.push({ id: `anchor${c}`, kind: 'marker', p: a, color: CLASS_COLORS[c], size: 9, ring: true });
+        if (vd === 2) items.push({ kind: 'label', p: a, text: `${c === 0 ? 'blue' : 'red'} → (${a.map((v) => (v < 0 ? '−1' : v > 0 ? '1' : '0')).join(', ')})`, color: CLASS_COLORS[c] });
+      });
     }
     // Jacobian ellipses
     const jd = traces.ds.find((d) => d.role === 'jac');
@@ -433,12 +474,13 @@
     const box = viz2.viewBox(), key = box.map((v) => v.toFixed(3)).join() + netVersion + trainer.step_;
     if (bgCache && bgCache.key === key) return bgCache.item;
     const W = 90, H = Math.max(10, Math.round((W * (box[3] - box[1])) / (box[2] - box[0])));
-    const rgba = new Uint8ClampedArray(W * H * 4), c0 = [88, 166, 255], c1 = [255, 166, 87];
+    const rgba = new Uint8ClampedArray(W * H * 4), c0 = [88, 166, 255], c1 = [255, 107, 107];
     for (let j = 0; j < H; j++) {
       for (let i = 0; i < W; i++) {
         const x = box[0] + ((i + 0.5) * (box[2] - box[0])) / W, y = box[3] - ((j + 0.5) * (box[3] - box[1])) / H;
         const o = net.predict([x, y]);
-        const p1 = 1 / (1 + Math.exp(o[0] - o[1]));
+        // "red-ness": softmax probability (classify) or which anchor the point is sent closer to (anchors)
+        const p1 = isClassify() ? 1 / (1 + Math.exp(o[0] - o[1])) : 1 / (1 + Math.exp(4 * o[0]));
         const k = 4 * (j * W + i);
         for (let c = 0; c < 3; c++) rgba[k + c] = c0[c] + p1 * (c1[c] - c0[c]);
         rgba[k + 3] = 26 + 60 * Math.abs(p1 - 0.5);
@@ -787,15 +829,35 @@
     if (!T) return;
     const parts = [`step ${T.step_}`];
     if (T.lossHistory.length) parts.push(`loss ${fmt(T.lossHistory[T.lossHistory.length - 1])}`);
+    const acc = accuracy();
+    if (acc !== null && T.step_ > 0) parts.push(`accuracy ${(100 * acc).toFixed(1)}%`);
     if (S.train.mode === 'sequential' && T.tasks.length) parts.push(T.done ? 'all tasks done' : `task ${T.task + 1}/${T.tasks.length}`);
     if (T.diverged) parts.push('diverged — lower the learning rate and press Reset');
     if (!T.tasks.length) parts.push(S.train.target === 'pins' ? 'add pins with the Pin tool' : 'choose a target');
     el.textContent = parts.join(' · ');
   }
 
-  function onTargetChange() {
+  /** One plain sentence saying what the chosen task asks the network to do. */
+  function targetNote() {
+    const z = S.dim === 3 ? ', 0' : '';
+    switch (S.train.target) {
+      case 'anchors': return `Every blue point should land on (1, 0${z}) and every red point on (−1, 0${z}). Loss: squared distance to its point. Watch each class shrink onto its point.`;
+      case 'classify': return 'Two output numbers (logits): blue points should end up on one side of the line logit₁ = logit₂, red points on the other. Loss: cross-entropy.';
+      case 'transform': return 'Every input x should go to A·x, where A is the chosen linear map (drawn dashed at the output).';
+      case 'pins': return 'With the Pin tool, drag from an input point to where its output should go; the network bends space to satisfy every pin.';
+      default: return 'No training: the network keeps its random weights. Move the stage slider to see what they do to space.';
+    }
+  }
+
+  function syncTargetUI() {
+    $('datasetRow').classList.toggle('hidden', !usesClasses());
+    $('transformRow').classList.toggle('hidden', !isTransform());
     $('amountRow').classList.toggle('hidden', !isTransform());
-    if (S.train.target === 'pins' && S.dim === 2 && tool !== 'pin') { /* keep the user's tool */ }
+    $('targetNote').textContent = targetNote();
+  }
+
+  function onTargetChange() {
+    syncTargetUI();
     // a bounded output activation (tanh, sigmoid…) cannot reach targets outside its range: train with a linear output
     if (S.train.target !== 'none' && !S.net.outputLinear) { S.net.outputLinear = true; $('outputLinear').checked = true; rebuildNet(true); }
     rebuildTrainer();
@@ -938,6 +1000,8 @@
     $('resetView').onclick = () => { viz2.cx = viz2.cy = 0; viz2.scale = Math.min(viz2.w, viz2.h) / 6; if (viz3) { viz3.orbit = { theta: 0.8, phi: 1.1, radius: 7 }; viz3.target.set(0, 0, 0); } };
 
     $('target').onchange = (e) => { S.train.target = e.target.value; training = false; onTargetChange(); };
+    $('dataset').onchange = (e) => { S.train.dataset = e.target.value; training = false; rebuildTrainer(); invalidate(); };
+    $('transform').onchange = (e) => { S.train.transform = e.target.value; training = false; rebuildTrainer(); invalidate(); };
     $('optimizer').onchange = (e) => { S.train.optimizer = e.target.value; trainer.setOpts({ optimizer: e.target.value }); };
     $('method').onchange = (e) => { S.train.method = e.target.value; trainer.setOpts({ method: e.target.value }); syncModeUI(); };
     $('modeJoint').onclick = () => { S.train.mode = 'joint'; syncModeUI(); rebuildTrainer(); };
@@ -1003,6 +1067,8 @@
       el.checked = !!S.display[k];
     }
     $('target').value = S.train.target;
+    $('dataset').value = S.train.dataset;
+    $('transform').value = S.train.transform;
     $('optimizer').value = S.train.optimizer;
     $('method').value = S.train.method;
     $('matrixKind').value = S.analysis.matrix;
@@ -1012,7 +1078,7 @@
     $('showCircle').parentElement.lastChild.textContent = S.dim === 2 ? ' Unit circle' : ' Unit sphere';
     [$('sx').value, $('sy').value, $('sz').value] = S.sphere.c;
     $('sr').value = S.sphere.r;
-    $('amountRow').classList.toggle('hidden', !isTransform());
+    syncTargetUI();
     syncModeUI();
     renderObjList();
     renderToolbar();
@@ -1117,6 +1183,9 @@
       display: { ...base.display, ...(j.display || {}) }, train: { ...base.train, ...(j.train || {}) },
       analysis: { ...base.analysis, ...(j.analysis || {}) }, sphere: { ...base.sphere, ...(j.sphere || {}) } };
     delete merged.weights; delete merged.dims;
+    const t0 = merged.train.target;                       // older files: one menu for task + dataset
+    if (['moons', 'circles', 'spirals'].includes(t0)) Object.assign(merged.train, { target: 'classify', dataset: t0 });
+    if (['rotation', 'shear', 'scaling'].includes(t0)) Object.assign(merged.train, { target: 'transform', transform: t0 });
     const prevDim = S.dim;
     S = merged;
     objId = 1 + Math.max(0, ...S.objects.map((o) => o.id || 0));

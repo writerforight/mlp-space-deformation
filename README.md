@@ -26,10 +26,17 @@ Three.js (from a CDN) is used only to draw the 3D view.
 - **Network.** 1–8 layers, hidden width 1–16 (wider layers are shown through a PCA projection),
   per-layer activation (identity, ReLU, tanh, sigmoid, GELU, sin), initialization (normal, uniform,
   Xavier, He) with scale and seed, and a **temperature** slider that randomizes the activations.
-- **Training view.** Classify two-class datasets (moons, circles, spirals) with cross-entropy, match a
-  fixed linear transform (rotation, shear, scaling) with MSE, or **pin points**: drag from an input
-  point to where its output should go. SGD or Adam, batch size, learning rate, steps per frame,
-  redraw interval, loss curve.
+- **Training view.** Pick a task and watch backpropagation reshape space:
+  - **send each class to a point** — every blue point should land on `(1, 0[, 0])`, every red point on
+    `(−1, 0[, 0])` (MSE). The clearest picture of classification: each class cloud is squashed onto its
+    point and the region between the classes is stretched into a cliff — a tiny version of the
+    "neural collapse" seen in large classifiers;
+  - **separate classes** with two output logits and cross-entropy;
+  - **match a linear map** (rotation, shear, scaling) with MSE;
+  - **pinned points**: drag from an input point to where its output should go.
+
+  Datasets: two moons, circles, spirals. SGD or Adam, batch size, learning rate, steps per frame,
+  redraw interval, loss curve and accuracy.
 - **Continual learning.** Sequential mode trains on one target (pin, or a chunk of the dataset) at a
   time. Anti-forgetting: replay buffer, orthogonal gradient projection (OGD) or an EWC penalty.
 - **Analysis.** Forgetting `F_A`, gradient interference (cosine matrix) or the neural tangent kernel,
@@ -85,6 +92,10 @@ everything with a negative coordinate onto an axis (when the width equals the di
 destroys information), tanh and sigmoid squash space into a box, and sin wraps it around, folding it
 onto itself. Classification networks are trained until the two classes become **linearly
 separable** in the output space: the decision boundary there is the line `logit₁ = logit₂`.
+When the task is to send each class to its own point, the network must do something even more
+drastic: squash each class onto a single point (the Jacobian there tends to zero, `det J ≈ 0`) while
+tearing the classes apart in between (large `‖J‖` near the decision boundary). With width 2 the whole
+plane typically ends up folded onto the segment between the two target points.
 
 ### The Jacobian: the local picture
 
