@@ -415,8 +415,8 @@
     const legend = $('legend');
     legend.classList.toggle('hidden', !showBg);
     if (showBg) legend.textContent = isAnchors()
-      ? 'Background = where the network sends each input: blue if its output lands closer to (1, 0), red if closer to (−1, 0). This is a reading rule applied to the output, not part of the network.'
-      : 'Background = which output logit is larger at each input (blue: logit₁, red: logit₂). This is a reading rule applied to the output, not part of the network.';
+      ? 'Background colour = f(x)·(1, 0): how far the network moves each input toward the blue point (1, 0) (brighter blue) or the red point (−1, 0) (brighter red). Dark = halfway, i.e. the network is undecided there. Full colour at ±1.'
+      : 'Background colour = logit₁ − logit₂: brighter blue where the first logit wins by more, brighter red where the second does; dark = undecided. Full colour at ±4.';
     for (const d of traces.ds) {
       if (d.role === 'jac' || d.role === 'probe' || d.role === 'pins' || d.role === 'interf') continue;
       const p = posCache.get(d);
@@ -499,21 +499,26 @@
     return { items, atInput, atOutput };
   }
 
-  /** Predicted class probability over the visible input region (classification targets, 2D). */
+  /**
+   * Background over the visible input region (2D, class tasks).  The colour is a plain measured number,
+   * no thresholding: v = f(x)·(1, 0) — how far the output moved toward the blue point (1, 0) versus the
+   * red point (−1, 0) — or, for logits, v = (logit₁ − logit₂)/4.  v = +1 → full blue, −1 → full red,
+   * 0 → dark (halfway); values beyond ±1 stay fully coloured.
+   */
   function backgroundImage() {
     const box = viz2.viewBox(), key = box.map((v) => v.toFixed(3)).join() + netVersion + trainer.step_;
     if (bgCache && bgCache.key === key) return bgCache.item;
     const W = 90, H = Math.max(10, Math.round((W * (box[3] - box[1])) / (box[2] - box[0])));
-    const rgba = new Uint8ClampedArray(W * H * 4), c0 = [88, 166, 255], c1 = [255, 107, 107];
+    const rgba = new Uint8ClampedArray(W * H * 4), blue = [88, 166, 255], red = [255, 107, 107];
     for (let j = 0; j < H; j++) {
       for (let i = 0; i < W; i++) {
         const x = box[0] + ((i + 0.5) * (box[2] - box[0])) / W, y = box[3] - ((j + 0.5) * (box[3] - box[1])) / H;
         const o = net.predict([x, y]);
-        // "red-ness": softmax probability (classify) or which anchor the point is sent closer to (anchors)
-        const p1 = isClassify() ? 1 / (1 + Math.exp(o[0] - o[1])) : 1 / (1 + Math.exp(4 * o[0]));
-        const k = 4 * (j * W + i);
-        for (let c = 0; c < 3; c++) rgba[k + c] = c0[c] + p1 * (c1[c] - c0[c]);
-        rgba[k + 3] = 26 + 60 * Math.abs(p1 - 0.5);
+        const raw = isClassify() ? (o[0] - o[1]) / 4 : o[0];
+        const v = Math.max(-1, Math.min(1, Number.isFinite(raw) ? raw : 0));
+        const col = v >= 0 ? blue : red, k = 4 * (j * W + i);
+        for (let c = 0; c < 3; c++) rgba[k + c] = col[c];
+        rgba[k + 3] = Math.round(150 * Math.abs(v));      // brightness ∝ |v|: dark near the halfway line
       }
     }
     bgCache = { key, item: { kind: 'image', bbox: box, w: W, h: H, rgba } };
