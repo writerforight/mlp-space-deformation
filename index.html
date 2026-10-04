@@ -46,6 +46,10 @@
     background: rgba(13, 17, 23, 0.7); padding: 4px 8px; border-radius: 6px;
   }
   #stageLabel b { font-size: 14px; }
+  #legend {
+    position: absolute; bottom: 30px; left: 12px; right: 12px; max-width: 640px; pointer-events: none;
+    background: rgba(13, 17, 23, 0.78); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; font-size: 12px;
+  }
   #hint { position: absolute; bottom: 8px; left: 12px; color: var(--muted); pointer-events: none; font-size: 12px; }
   #stagebar {
     display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-top: 1px solid var(--line); background: var(--panel);
@@ -245,6 +249,7 @@
       <div id="c3d" class="hidden"></div>
       <div id="toolbar"></div>
       <div id="stageLabel"></div>
+      <div id="legend" class="hidden"></div>
       <div id="hint"></div>
     </div>
     <div id="stagebar">

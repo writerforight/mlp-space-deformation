@@ -409,7 +409,14 @@
         distMax = Math.max(distMax, Math.sqrt(s));
       }
     }
-    if (vd === 2 && usesClasses() && tt < 0.5) items.push(backgroundImage());
+    const showBg = vd === 2 && usesClasses() && tt < 0.5;
+    if (showBg) items.push(backgroundImage());
+    // say what the colours are: a reading rule applied to the network's output, not part of the network
+    const legend = $('legend');
+    legend.classList.toggle('hidden', !showBg);
+    if (showBg) legend.textContent = isAnchors()
+      ? 'Background = where the network sends each input: blue if its output lands closer to (1, 0), red if closer to (−1, 0). This is a reading rule applied to the output, not part of the network.'
+      : 'Background = which output logit is larger at each input (blue: logit₁, red: logit₂). This is a reading rule applied to the output, not part of the network.';
     for (const d of traces.ds) {
       if (d.role === 'jac' || d.role === 'probe' || d.role === 'pins' || d.role === 'interf') continue;
       const p = posCache.get(d);
@@ -871,7 +878,7 @@
     const parts = [`step ${T.step_}`];
     if (T.lossHistory.length) parts.push(`loss ${fmt(T.lossHistory[T.lossHistory.length - 1])}`);
     const acc = accuracy();
-    if (acc !== null && T.step_ > 0) parts.push(`accuracy ${(100 * acc).toFixed(1)}%`);
+    if (acc !== null && T.step_ > 0) parts.push(`accuracy ${(100 * acc).toFixed(1)}% (${isAnchors() ? 'nearest target point' : 'larger logit'})`);
     if (S.train.mode === 'sequential' && T.tasks.length) parts.push(T.done ? 'all tasks done' : `task ${T.task + 1}/${T.tasks.length}`);
     if (T.diverged) parts.push('diverged — lower the learning rate and press Reset');
     if (!T.tasks.length) parts.push(S.train.target === 'pins' ? 'add pins with the Pin tool' : 'choose a target');
