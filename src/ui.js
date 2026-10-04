@@ -891,7 +891,26 @@
 
   function onPinsChanged() {
     rebuildTrainer();
+    renderPinList();
     invalidate();
+  }
+
+  /** Pins with their input → target coordinates, each removable. */
+  function renderPinList() {
+    const box = $('pinList');
+    box.innerHTML = '';
+    $('clearPins').disabled = !S.pins.length;
+    const f = (v) => '(' + Array.from(v).map((x) => x.toFixed(2)).join(', ') + ')';
+    S.pins.forEach((p, i) => {
+      const row = document.createElement('div');
+      row.className = 'obj';
+      row.innerHTML = `<span class="dot" style="background:${PALETTE[i % PALETTE.length]}"></span><span>pin ${i + 1} · ${f(p.x)} → ${f(p.y)}</span>`;
+      const del = document.createElement('button');
+      del.textContent = '✕'; del.dataset.tip = 'Delete this pin';
+      del.onclick = () => { training = false; S.pins.splice(i, 1); onPinsChanged(); };
+      row.appendChild(del);
+      box.appendChild(row);
+    });
   }
 
   // ===========================================================================
@@ -1058,6 +1077,7 @@
     };
     for (const id of ['sx', 'sy', 'sz', 'sr']) $(id).onchange = readSphereInputs;
     $('clearObjects').onclick = () => { S.objects = []; renderObjList(); invalidate(); };
+    $('clearPins').onclick = () => { training = false; S.pins = []; onPinsChanged(); };
     $('examples').onclick = addExamples;
     $('exportBtn').onclick = exportState;
     $('recommendBtn').onclick = applyRecommended;
@@ -1132,6 +1152,7 @@
     syncTargetUI();
     syncModeUI();
     renderObjList();
+    renderPinList();
     renderToolbar();
   }
 
