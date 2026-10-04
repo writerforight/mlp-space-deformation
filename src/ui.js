@@ -244,6 +244,14 @@
     return pts;
   }
 
+  /** The points compared by the interference / NTK matrix (row/column i ↔ point i + 1 on screen). */
+  function interferenceSamples() {
+    if (S.train.target === 'pins') return S.pins.map((p) => ({ x: Float64Array.from(p.x), y: Float64Array.from(p.y) }));
+    if (data.length) return [...Array(16)].map((_, i) => data[Math.floor((i * data.length) / 16)]);
+    if (S.analysis.matrix === 'ntk') return jacobianProbePoints().slice(0, 9).map((x) => ({ x }));
+    return [];
+  }
+
   function allDrawables() {
     const ds = referenceDrawables().concat(userDrawables());
     if (usesClasses() && data.length) {
@@ -252,6 +260,10 @@
     if (S.pins.length) ds.push({ id: 'pins', role: 'pins', kind: 'points', pts: S.pins.map((p) => Float64Array.from(p.x)) });
     ds.push({ id: 'probe', role: 'probe', kind: 'points', pts: [Float64Array.from(S.probe)] });
     if (S.display.jac) ds.push({ id: 'jac', role: 'jac', kind: 'none', pts: jacobianProbePoints() });
+    if (S.train.target !== 'pins') {         // pins are already labelled "pin 1, pin 2, …"
+      const smp = interferenceSamples();
+      if (smp.length) ds.push({ id: 'interf', role: 'interf', kind: 'none', pts: smp.map((p) => p.x) });
+    }
     return ds;
   }
 
@@ -284,7 +296,7 @@
       // collect a sample of all points at this stage for PCA
       const cloud = [];
       for (const d of ds) {
-        if (d.role === 'probe' || d.role === 'jac') continue;
+        if (d.role === 'probe' || d.role === 'jac' || d.role === 'interf') continue;
         const k = Math.max(1, Math.floor(d.st.length / 120));
         for (let i = 0; i < d.st.length; i += k) cloud.push(d.st[i][s]);
       }
@@ -399,7 +411,7 @@
     }
     if (vd === 2 && usesClasses() && tt < 0.5) items.push(backgroundImage());
     for (const d of traces.ds) {
-      if (d.role === 'jac' || d.role === 'probe' || d.role === 'pins') continue;
+      if (d.role === 'jac' || d.role === 'probe' || d.role === 'pins' || d.role === 'interf') continue;
       const p = posCache.get(d);
       let colors = d.colors;
       if (D.det && d.hasJ && d.role !== 'data') colors = detColors(d, tt);
@@ -461,6 +473,16 @@
         items.push({ id: `pinC${i}`, kind: 'marker', p: c, color: col, size: 4 });
         if (vd === 2) items.push({ kind: 'label', p: pin.y, text: `pin ${i + 1}`, color: col });
       });
+    }
+    // numbered rings: the points compared by the interference matrix
+    const id_ = traces.ds.find((d) => d.role === 'interf');
+    if (id_) {
+      const p = posCache.get(id_);
+      for (let i = 0; i < id_.pts.length; i++) {
+        const c = Array.from(p.subarray(i * vd, (i + 1) * vd));
+        items.push({ id: `interf${i}`, kind: 'marker', p: c, color: 'rgba(230,237,243,0.9)', size: 5, ring: true });
+        if (vd === 2) items.push({ kind: 'label', p: c, text: String(i + 1), color: '#e6edf3' });
+      }
     }
     // probe point used by the sensitivity panel
     const pr = traces.ds.find((d) => d.role === 'probe');
@@ -938,10 +960,7 @@
     }
     // interference / NTK
     const kind = S.analysis.matrix;
-    let samples = [];
-    if (S.train.target === 'pins') samples = S.pins.map((p) => ({ x: Float64Array.from(p.x), y: Float64Array.from(p.y) }));
-    else if (data.length) for (let i = 0; i < 16; i++) samples.push(data[Math.floor((i * data.length) / 16)]);
-    if (kind === 'ntk' && !samples.length) samples = jacobianProbePoints().slice(0, 9).map((x) => ({ x }));
+    const samples = interferenceSamples();
     if (kind === 'cosine' && !samples.length) {
       Charts.heatmap($('heatmap'), [], { empty: 'choose a target or add pins' });
       $('heatNote').textContent = '';
@@ -949,8 +968,8 @@
       const M = kind === 'ntk' ? NN.ntkMatrix(net, samples.map((s) => s.x)) : NN.gradientCosine(net, samples, isClassify() ? 'ce' : 'mse');
       Charts.heatmap($('heatmap'), M, { mode: kind === 'ntk' ? 'sequential' : 'diverging' });
       $('heatNote').textContent = kind === 'ntk'
-        ? `K(xᵢ, xⱼ) = tr(Jᵢ Jⱼᵀ) for ${samples.length} points; brighter = training one point moves the other's output more.`
-        : `cos(∇Lᵢ, ∇Lⱼ) for ${samples.length} ${S.train.target === 'pins' ? 'pins' : 'samples'}: red = they agree, blue = they fight (interference).`;
+        ? `K(xᵢ, xⱼ) = tr(Jᵢ Jⱼᵀ) for the ${samples.length} ${S.train.target === 'pins' ? 'pins' : 'numbered points in the view'}; brighter = training one point moves the other's output more.`
+        : `cos(∇Lᵢ, ∇Lⱼ) for the ${samples.length} ${S.train.target === 'pins' ? 'pins' : 'numbered points in the view'}: red = they agree, blue = they fight (interference).`;
     }
     // sensitivity at the probe point
     drawSensitivity();
@@ -1056,7 +1075,7 @@
     };
     $('trainStep').onclick = () => { training = false; trainSteps(1); invalidate(); netVersion++; };
     $('trainReset').onclick = () => { training = false; rebuildNet(); };
-    $('matrixKind').onchange = (e) => { S.analysis.matrix = e.target.value; analysisDirty = true; };
+    $('matrixKind').onchange = (e) => { S.analysis.matrix = e.target.value; invalidate(); };
 
     $('play').onclick = () => {
       if (!traces) computeTraces();
