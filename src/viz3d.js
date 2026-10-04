@@ -28,6 +28,7 @@
       this.orbit = { theta: 0.8, phi: 1.1, radius: 7 };
       this.objects = new Map();
       this.allowRotate = () => true;
+      this.onUserZoom = () => {};   // called when the user zooms or pans (ui.js turns auto-fit off)
       this.addFixedAxes();
       this.bindControls();
       this.resize();
@@ -78,6 +79,7 @@
           const right = new THREE.Vector3().setFromMatrixColumn(this.camera.matrix, 0);
           const up = new THREE.Vector3().setFromMatrixColumn(this.camera.matrix, 1);
           this.target.addScaledVector(right, -dx * s).addScaledVector(up, dy * s);
+          this.onUserZoom();
         } else {
           this.orbit.theta += dx * 0.008;
           this.orbit.phi = Math.min(Math.PI - 0.05, Math.max(0.05, this.orbit.phi - dy * 0.008));
@@ -88,7 +90,8 @@
       el.addEventListener('pointercancel', end);
       el.addEventListener('wheel', (e) => {
         e.preventDefault();
-        this.orbit.radius = Math.min(200, Math.max(0.5, this.orbit.radius * Math.exp(e.deltaY * 0.001)));
+        this.orbit.radius = Math.min(200, Math.max(0.5, this.orbit.radius * Math.exp(wheelPixels(e) * 0.001)));
+        this.onUserZoom();
       }, { passive: false });
     }
 

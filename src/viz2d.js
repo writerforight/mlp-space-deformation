@@ -315,7 +315,16 @@
     return `rgb(${c[0]},${c[1]},${c[2]})`;
   }
 
+  /**
+   * Wheel distance in pixels.  Firefox reports wheel steps in lines (deltaMode 1, ≈3 per notch) or
+   * pages (deltaMode 2); treating those as pixels would make zooming almost invisible.
+   */
+  function wheelPixels(e) {
+    return e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1);
+  }
+
   root.Viz2D = Viz2D;
+  root.wheelPixels = wheelPixels;
   root.Charts = Charts;
   root.Colors = { divColor, seqColor };
 })(window);

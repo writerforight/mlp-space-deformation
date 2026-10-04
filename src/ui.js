@@ -30,7 +30,7 @@
         overrides: [], init: { dist: 'he', scale: 1.6, seed: 2 } },
       objects: [],
       nPoints: 300,
-      display: { grid: true, circle: true, basis: true, origin: true, jac: false, det: false, dist: false, autoFit: true },
+      display: { grid: true, circle: true, basis: true, origin: true, jac: false, det: false, dist: false, autoFit: false },
       train: { target: 'none', dataset: 'moons', transform: 'rotation', amount: 0.9, optimizer: 'adam', lr: 0.01, batch: 32, stepsPerFrame: 5,
         redrawEvery: 10, mode: 'joint', stepsPerTask: 300, nTasks: 3, method: 'none', lambda: 100 },
       pins: [],
@@ -92,6 +92,7 @@
     }
     netVersion++;
     renderLayerActs();
+    if ($('targetNote')) $('targetNote').textContent = targetNote() + outputWarning();
     invalidate();
   }
 
@@ -758,7 +759,7 @@
     });
     cv.addEventListener('pointermove', (e) => {
       const r = cv.getBoundingClientRect(), w = viz2.toWorld(e.clientX - r.left, e.clientY - r.top);
-      if (pan) { viz2.panBy(e.clientX - pan.x, e.clientY - pan.y); pan.x = e.clientX; pan.y = e.clientY; return; }
+      if (pan) { viz2.panBy(e.clientX - pan.x, e.clientY - pan.y); pan.x = e.clientX; pan.y = e.clientY; userMovedView(); return; }
       if (!drawing) return;
       if (drawing.type === 'circle') drawing.r = Math.hypot(w[0] - drawing.c[0], w[1] - drawing.c[1]);
       else if (drawing.type === 'pin') drawing.y = w;
@@ -773,13 +774,31 @@
     cv.addEventListener('wheel', (e) => {
       e.preventDefault();
       const r = cv.getBoundingClientRect();
-      viz2.zoomAt(e.clientX - r.left, e.clientY - r.top, Math.exp(-e.deltaY * 0.0015));
+      viz2.zoomAt(e.clientX - r.left, e.clientY - r.top, Math.exp(-wheelPixels(e) * 0.0015));
+      userMovedView();
     }, { passive: false });
+  }
+
+  /** Manual zoom / pan wins over auto-fit (otherwise auto-fit would undo it on the next frame). */
+  function userMovedView() {
+    if (!S.display.autoFit) return;
+    S.display.autoFit = false;
+    $('autoFit').checked = false;
+    flashHint('Auto-fit turned off so your zoom stays. Turn it back on under Display → Auto-fit view.');
+  }
+
+  let hintTimer = null;
+  function flashHint(text) {
+    $('hint').textContent = text;
+    $('hint').style.color = '#e3b341';
+    clearTimeout(hintTimer);
+    hintTimer = setTimeout(() => { $('hint').style.color = ''; renderToolbar(); }, 4500);
   }
 
   function bind3DMouse() {
     const el = viz3.renderer.domElement;
     viz3.allowRotate = (e) => tool === 'pan' || e.button === 2;
+    viz3.onUserZoom = userMovedView;
     const pos = (e) => { const r = el.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
     el.addEventListener('pointerdown', (e) => {
       if (tool === 'pan' || e.button !== 0) return;
@@ -849,17 +868,23 @@
     }
   }
 
+  /** Warn (instead of silently changing settings) when the output activation cannot reach the targets. */
+  function outputWarning() {
+    if (!net || !['anchors', 'transform', 'pins'].includes(S.train.target)) return '';
+    const act = net.acts[net.nLayers - 1];
+    const range = { tanh: '−1…1', sigmoid: '0…1', sin: '−1…1', relu: '≥ 0', gelu: '≥ −0.17' }[act];
+    return range ? ` ⚠ The output layer uses ${act} (range ${range}), so some targets are out of reach — tick “Linear output layer” or press ★ Recommended.` : '';
+  }
+
   function syncTargetUI() {
     $('datasetRow').classList.toggle('hidden', !usesClasses());
     $('transformRow').classList.toggle('hidden', !isTransform());
     $('amountRow').classList.toggle('hidden', !isTransform());
-    $('targetNote').textContent = targetNote();
+    $('targetNote').textContent = targetNote() + outputWarning();
   }
 
   function onTargetChange() {
     syncTargetUI();
-    // a bounded output activation (tanh, sigmoid…) cannot reach targets outside its range: train with a linear output
-    if (S.train.target !== 'none' && !S.net.outputLinear) { S.net.outputLinear = true; $('outputLinear').checked = true; rebuildNet(true); }
     rebuildTrainer();
     invalidate();
   }
@@ -1035,9 +1060,35 @@
     $('clearObjects').onclick = () => { S.objects = []; renderObjList(); invalidate(); };
     $('examples').onclick = addExamples;
     $('exportBtn').onclick = exportState;
+    $('recommendBtn').onclick = applyRecommended;
     $('importBtn').onclick = () => $('importFile').click();
     $('importFile').onchange = (e) => { const f = e.target.files[0]; if (f) f.text().then(importState).catch((err) => alert('Import failed: ' + err.message)); e.target.value = ''; };
   }
+
+  /**
+   * ★ Recommended: one click aligns everything to settings that work well for the current task and
+   * data — architecture, activations, initialisation, optimiser and the view.  Nothing else in the app
+   * changes settings on its own; this button is the only "auto" behaviour.
+   */
+  function applyRecommended() {
+    const d = S.dim, T = S.train;
+    let arch;
+    if (T.target === 'anchors' || T.target === 'classify') {
+      arch = { moons: [4, d], circles: [4, d === 3 ? 6 : 4], spirals: [6, 6] }[T.dataset];
+    } else if (T.target === 'transform') arch = [2, 4];
+    else if (T.target === 'pins') arch = [3, 6];
+    else arch = [3, d];
+    const training = T.target !== 'none';
+    Object.assign(S.net, { layers: arch[0], width: arch[1], defaultAct: 'tanh', temperature: 0, overrides: [],
+      outputLinear: training, init: { ...S.net.init, dist: training ? 'xavier' : 'he', scale: training ? 1 : 1.6 } });
+    Object.assign(T, { optimizer: 'adam', lr: 0.01, batch: 32, stepsPerFrame: 10, redrawEvery: 10 });
+    training_stop();
+    rebuildNet();
+    syncControls();
+    fitView();
+    flashHint(`★ Recommended: ${arch[0]} layers, width ${arch[1]}, tanh${training ? ', linear output, Xavier init' : ', He init ×1.6'}, Adam lr 0.01 — view fitted.`);
+  }
+  function training_stop() { training = false; updateTrainStatus(); }
 
   /** After a finished sequential run, "Train" starts a new run on the current weights. */
   function rebuildTrainerKeepWeights() {

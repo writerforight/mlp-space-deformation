@@ -42,6 +42,9 @@ Three.js (from a CDN) is used only to draw the 3D view.
 - **Analysis.** Forgetting `F_A`, gradient interference (cosine matrix) or the neural tangent kernel,
   input sensitivity (finite differences vs. the Jacobian, Lipschitz estimates), and an invertibility
   report per layer (rank, singular values, collapse warnings).
+- **You stay in control.** Nothing changes your settings or the view on its own: zoom with the wheel,
+  pan by dragging. One button, **★ Recommended**, aligns everything to settings that work well for the
+  current task and data (layers, width, activations, initialization, optimizer) and fits the view.
 - **Share.** Export/import the full state (architecture, seed, weights, objects, pins, settings) as JSON.
 
 ## Run locally
