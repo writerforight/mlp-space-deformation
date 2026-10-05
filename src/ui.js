@@ -215,6 +215,7 @@
     buildData();
     trainer = new NN.Trainer(net, trainerOpts());
     trainer.setTasks(buildTasks());
+    resetHistory();
     analysisDirty = true;
     updateTrainStatus();
   }
@@ -953,9 +954,9 @@
     for (let i = 0; i < k; i++) {
       const r = trainer.step();
       if (r === null) { training = false; break; }
-      if (++stepsSinceRedraw >= S.train.redrawEvery) { stepsSinceRedraw = 0; invalidate(); netVersion++; }
+      if (++stepsSinceRedraw >= S.train.redrawEvery) { stepsSinceRedraw = 0; invalidate(); netVersion++; pushHistory(); }
     }
-    if (!training) { invalidate(); netVersion++; }
+    if (!training) { invalidate(); netVersion++; pushHistory(); }
     if (trainer.lossHistory.length > 20000) trainer.lossHistory.splice(0, trainer.lossHistory.length - 20000);
     updateTrainStatus();
   }
@@ -1088,9 +1089,17 @@
     return a !== 0 && (a < 1e-3 || a >= 1e4) ? v.toExponential(2) : v.toFixed(a < 1 ? 4 : 3);
   }
 
+  const isOpen = (sec) => { const el = document.querySelector(`details[data-sec="${sec}"]`); return !el || el.open; };
+
   function updateAnalysis() {
-    drawLoss();
-    // forgetting
+    if (isOpen('loss')) drawLoss();
+    if (isOpen('forgetting')) updateForgetting();
+    if (isOpen('interference')) updateInterference();
+    if (isOpen('sensitivity')) drawSensitivity();
+    if (isOpen('invertibility')) updateInvertibility();
+  }
+
+  function updateForgetting() {
     const F = trainer.forgetting(), names = trainer.tasks.map((_, i) => (S.train.target === 'pins' ? `pin ${i + 1}` : `task ${i + 1}`));
     if (!trainer.tasks.length) $('forgetting').innerHTML = '<div class="note">No tasks yet.</div>';
     else if (S.train.mode !== 'sequential') {
@@ -1101,7 +1110,9 @@
         ? [names[i], fmt(f.after), fmt(f.now), { v: fmt(f.F), cls: f.F > 1e-3 ? 'bad' : 'good' }]
         : [names[i], '—', fmt(trainer.taskLoss(i)), '—']));
     }
-    // interference / NTK
+  }
+
+  function updateInterference() {
     const kind = S.analysis.matrix;
     const samples = interferenceSamples();
     if (kind === 'cosine' && !samples.length) {
@@ -1114,9 +1125,9 @@
         ? `K(xᵢ, xⱼ) = tr(Jᵢ Jⱼᵀ) for the ${samples.length} ${S.train.target === 'pins' ? 'pins' : 'numbered points in the view'}; brighter = training one point moves the other's output more.`
         : `cos(∇Lᵢ, ∇Lⱼ) for the ${samples.length} ${S.train.target === 'pins' ? 'pins' : 'numbered points in the view'}: red = they agree, blue = they fight (interference).`;
     }
-    // sensitivity at the probe point
-    drawSensitivity();
-    // invertibility
+  }
+
+  function updateInvertibility() {
     const pts = [];
     for (const d of (traces ? traces.ds : [])) if (d.role !== 'jac') { const k = Math.max(1, Math.floor(d.pts.length / 60)); for (let i = 0; i < d.pts.length; i += k) pts.push(d.pts[i]); }
     const rep = NN.layerReport(net, pts.length ? pts : [new Float64Array(S.dim)]);
@@ -1654,7 +1665,9 @@
     advanceAnimation(now);
     if (training) trainSteps(S.train.stepsPerFrame);
     try { render(); } catch (err) { console.error(err); }
-    if (now - lastLossDraw > 120 && training) { drawLoss(); lastLossDraw = now; }
+    if (now - lastLossDraw > 120 && training) { if (isOpen('loss')) drawLoss(); lastLossDraw = now; }
+    if (now - lastInspector > (training ? 120 : 60)) { lastInspector = now; try { renderInspectorAndNet(); } catch (err) { console.error(err); } }
+    renderSummaries();
     if (analysisDirty && now - lastAnalysis > (training ? 700 : 150)) {
       analysisDirty = false; lastAnalysis = now;
       try { updateAnalysis(); } catch (err) { console.error(err); }
@@ -1662,15 +1675,228 @@
     requestAnimationFrame(frame);
   }
 
+  // ===========================================================================
+  // Layer inspector, network diagram, weight history
+  // ===========================================================================
+
+  const inspect = { layer: 1, hover: null, cells: [], netHits: [], key: '' };
+  let history = [], lastInspector = 0;
+
+  /** Weight snapshots for the history chart (decimated to at most ~400 points). */
+  function resetHistory() { history = net ? [{ step: trainer ? trainer.step_ : 0, theta: Float64Array.from(net.theta) }] : []; }
+  function pushHistory() {
+    if (!net) return;
+    const step = trainer ? trainer.step_ : 0;
+    if (history.length && history[0].theta.length !== net.nParams) resetHistory();
+    const last = history[history.length - 1];
+    if (last && last.step === step && last.theta.every((v, k) => v === net.theta[k])) return;
+    history.push({ step, theta: Float64Array.from(net.theta) });
+    if (history.length > 400) history = history.filter((_, k) => k === 0 || k % 2 === 1 || k === history.length - 1);
+  }
+
+  /** Pre-activations z of layer l (1-based) for the points that are drawn (from the cached traces). */
+  function layerZs(l) {
+    if (!traces) return [];
+    const out = [], s = 2 * l - 1;
+    for (const d of traces.ds) {
+      if (d.role === 'jac' || d.role === 'probe' || d.role === 'interf') continue;
+      const k = Math.max(1, Math.floor(d.st.length / 400));
+      for (let i = 0; i < d.st.length; i += k) for (const v of d.st[i][s]) out.push(v);
+      if (out.length > 8000) break;
+    }
+    return out;
+  }
+
+  function renderInspectorAndNet() {
+    if (!net || !traces) return;
+    const L = net.nLayers;
+    inspect.layer = Math.min(Math.max(1, inspect.layer), L);
+    const key = `${netVersion}|${trainer.step_}|${inspect.layer}|${Math.round(t * 100)}|${JSON.stringify(inspect.hover)}|${history.length}|${S.probe.join()}`;
+    if (key === inspect.key) return;
+    inspect.key = key;
+    const current = t > 1e-6 ? Math.max(1, Math.ceil(t / 2 - 1e-6)) : 0;   // layer the view is showing (0 = input)
+    if (!$('netStrip').classList.contains('hidden')) {
+      const { as } = net.forward(Float64Array.from(S.probe));
+      inspect.netHits = Inspector.drawNetwork($('netCanvas'), { net, values: as, selected: inspect.layer, current });
+    }
+    if (!isOpen('inspector')) return;
+    const l = inspect.layer, Lay = net.layout[l - 1], act = net.acts[l - 1];
+    const W = net.weightMatrix(l - 1), b = Array.from(net.theta.subarray(Lay.b, Lay.b + Lay.nout));
+    const h0 = history.length && history[0].theta.length === net.nParams ? history[0].theta : null;
+    const W0 = h0 ? W.map((_, i) => Array.from(h0.subarray(Lay.w + i * Lay.nin, Lay.w + (i + 1) * Lay.nin))) : null;
+    $('inspTitle').innerHTML = `Layer ${l} of ${L}<span class="tag">${Lay.nin} → ${Lay.nout} · ${act}${l === L ? ' · output' : ''}</span>`;
+    $('inspPrev').disabled = l <= 1; $('inspNext').disabled = l >= L;
+    inspect.cells = Inspector.drawWeights($('wCanvas'), W, b, { W0, hover: inspect.hover });
+    // numbers
+    const sv = NN.singularValues(W), rank = NN.rankOf(sv);
+    let fro = 0, dfro = 0;
+    W.forEach((r, i) => r.forEach((v, j) => { fro += v * v; if (W0) dfro += (v - W0[i][j]) ** 2; }));
+    const rows = [['singular values', sv.slice(0, 4).map((v) => v.toFixed(3)).join(', ') + (sv.length > 4 ? ' …' : '')],
+      ['rank', `${rank} of ${Math.min(Lay.nin, Lay.nout)}${rank < Math.min(Lay.nin, Lay.nout) ? ' — squashes a dimension' : ''}`]];
+    if (Lay.nin === Lay.nout) { const dt = NN.det(W); rows.push(['det W', `${fmt(dt)}${dt < 0 ? ' (mirrors space)' : ''}`]); }
+    rows.push(['‖W‖ (Frobenius)', fmt(Math.sqrt(fro))]);
+    if (W0) rows.push(['change since start', `‖W − W₀‖ = ${fmt(Math.sqrt(dfro))} (bars under the cells)`]);
+    $('wStats').innerHTML = rows.map(([k, v]) => `<span>${k}</span><span>${v}</span>`).join('');
+    // activation + where the points are
+    const zs = layerZs(l);
+    Inspector.drawActivation($('actCanvas'), act, zs);
+    let note = '';
+    if (zs.length) {
+      const frac = (f) => `${(100 * zs.filter(f).length / zs.length).toFixed(0)}%`;
+      note = act === 'relu' ? `${frac((z) => z <= 0)} of the values are negative → set to 0 (that part of space is flattened).`
+        : act === 'tanh' ? `${frac((z) => Math.abs(z) > 2.5)} of the values are in the flat tails (|z| > 2.5) where tanh barely changes.`
+        : act === 'sigmoid' ? `${frac((z) => Math.abs(z) > 4)} of the values are in the flat tails (|z| > 4).`
+        : act === 'sin' ? `${frac((z) => Math.abs(z) > Math.PI / 2)} of the values are beyond ±π/2, where sin turns back (folds).`
+        : act === 'gelu' ? `${frac((z) => z < -0.75)} of the values are below −0.75, where GELU turns back up (folds).`
+        : 'Identity: this step changes nothing — the layer is purely linear.';
+    }
+    $('actNote').textContent = (zs.length ? 'Grey bars: where the drawn points fall. ' : '') + note;
+    Inspector.drawHistory($('histCanvas'), history, Lay);
+    $('histNote').textContent = history.length > 1
+      ? (history[0].step === history[history.length - 1].step
+        ? `${history.length - 1} hand edit(s), no training yet. Solid = weights (colour = output neuron), dashed = biases.`
+        : `${history.length} snapshots from step ${history[0].step} to ${history[history.length - 1].step}. Solid = weights (colour = output neuron), dashed = biases.`)
+      : '';
+  }
+
+  function selectLayer(l, jump) {
+    inspect.layer = Math.min(Math.max(1, l), net.nLayers);
+    inspect.hover = null;
+    const det = document.querySelector('details[data-sec="inspector"]');
+    if (det && !det.open) det.open = true;
+    if (jump) animateTo(2 * inspect.layer);
+    inspect.key = '';
+  }
+
+  function setupInspector() {
+    $('inspPrev').onclick = () => selectLayer(inspect.layer - 1, false);
+    $('inspNext').onclick = () => selectLayer(inspect.layer + 1, false);
+    $('inspShowLin').onclick = () => animateTo(2 * inspect.layer - 1);
+    $('inspShowAct').onclick = () => animateTo(2 * inspect.layer);
+    const wc = $('wCanvas'), tip = $('tip');
+    const cellAt = (e) => {
+      const r = wc.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+      return inspect.cells.find((c) => x >= c.x && x <= c.x + c.w && y >= c.y && y <= c.y + c.h) || null;
+    };
+    wc.addEventListener('mousemove', (e) => {
+      const c = cellAt(e);
+      const hv = c ? { kind: c.kind, i: c.i, j: c.j } : null;
+      if (JSON.stringify(hv) !== JSON.stringify(inspect.hover)) { inspect.hover = hv; inspect.key = ''; }
+      if (!c) { tip.classList.add('hidden'); return; }
+      const Lay = net.layout[inspect.layer - 1];
+      const v = c.kind === 'W' ? net.theta[Lay.w + c.i * Lay.nin + c.j] : net.theta[Lay.b + c.i];
+      tip.textContent = c.kind === 'W'
+        ? `W[${c.i + 1}][${c.j + 1}] = ${v.toFixed(4)} — how much input a${c.j + 1} pushes neuron z${c.i + 1}. Double-click to edit.`
+        : `b[${c.i + 1}] = ${v.toFixed(4)} — bias (constant shift) of neuron z${c.i + 1}. Double-click to edit.`;
+      tip.classList.remove('hidden');
+      tip.style.left = Math.min(window.innerWidth - tip.offsetWidth - 8, e.clientX + 14) + 'px';
+      tip.style.top = (e.clientY + 18) + 'px';
+    });
+    wc.addEventListener('mouseleave', () => { inspect.hover = null; inspect.key = ''; tip.classList.add('hidden'); });
+    wc.addEventListener('dblclick', (e) => {
+      const c = cellAt(e);
+      if (!c) return;
+      const Lay = net.layout[inspect.layer - 1], off = c.kind === 'W' ? Lay.w + c.i * Lay.nin + c.j : Lay.b + c.i;
+      const r = wc.getBoundingClientRect();
+      const inp = document.createElement('input');
+      inp.className = 'cell-edit'; inp.type = 'text'; inp.value = net.theta[off].toFixed(4);
+      inp.style.left = (r.left + c.x) + 'px'; inp.style.top = (r.top + c.y) + 'px';
+      document.body.appendChild(inp); inp.focus(); inp.select();
+      let done = false;
+      const finish = (apply) => {
+        if (done) return; done = true;
+        const v = parseFloat(inp.value.replace(',', '.'));
+        inp.remove();
+        if (!apply || !Number.isFinite(v)) return;
+        training = false;
+        net.theta[off] = v;
+        if (S.net.homeo) NN.clampSingularValues(net, HOMEO_FLOOR);
+        netVersion++; invalidate(); pushHistory(); inspect.key = '';
+        flashHint(`${c.kind === 'W' ? `W[${c.i + 1}][${c.j + 1}]` : `b[${c.i + 1}]`} of layer ${inspect.layer} set to ${v} — the deformation is redrawn.`);
+      };
+      inp.addEventListener('keydown', (k) => { if (k.key === 'Enter') finish(true); if (k.key === 'Escape') finish(false); });
+      inp.addEventListener('blur', () => finish(true));
+    });
+    // network diagram
+    $('netCanvas').addEventListener('click', (e) => {
+      const r = $('netCanvas').getBoundingClientRect(), x = e.clientX - r.left;
+      const h = inspect.netHits.find((z) => x >= z.x0 && x <= z.x1);
+      if (h) selectLayer(h.layer, true);
+    });
+    $('netToggle').onclick = () => {
+      const strip = $('netStrip'), show = strip.classList.contains('hidden');
+      strip.classList.toggle('hidden', !show);
+      $('netToggle').classList.toggle('on', show);
+      store('nsd.netStrip', show ? '1' : '0');
+      inspect.key = ''; onResize();
+    };
+    if (load('nsd.netStrip') === '1') { $('netStrip').classList.remove('hidden'); $('netToggle').classList.add('on'); }
+  }
+
+  // ===========================================================================
+  // Collapsible sections, header summaries, keyboard shortcuts
+  // ===========================================================================
+
+  function store(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* storage may be unavailable */ } }
+  function load(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+
+  /** Remember which sections are open; redraw charts when a section opens (closed canvases have no size). */
+  function setupSections() {
+    for (const d of document.querySelectorAll('details[data-sec]')) {
+      const saved = load(`nsd.sec.${d.dataset.sec}`);
+      if (saved !== null) d.open = saved === '1';
+      d.addEventListener('toggle', () => {
+        store(`nsd.sec.${d.dataset.sec}`, d.open ? '1' : '0');
+        if (d.open) { analysisDirty = true; inspect.key = ''; lastAnalysis = 0; }
+      });
+    }
+  }
+
+  const TASK_NAMES = { none: 'no training', anchors: 'classes → points', classify: 'classify', transform: 'linear map', morph: 'shape → shape', pins: 'pins' };
+  function setText(id, text) { const el = $(id); if (el && el.textContent !== text) el.textContent = text; }
+  function renderSummaries() {
+    if (!net) return;
+    setText('sumNetwork', `${net.nLayers} layer${net.nLayers > 1 ? 's' : ''} · width ${S.net.width} · ${S.net.temperature > 0 ? 'mixed' : S.net.defaultAct}${S.net.homeo ? ' · invertible' : ''}`);
+    setText('sumObjects', `${S.objects.length} object${S.objects.length === 1 ? '' : 's'}${S.pins.length ? ` · ${S.pins.length} pins` : ''}`);
+    const D = S.display, ov = [D.jac && 'Jacobian', D.det && 'det', D.dist && 'distance', D.autoFit && 'auto-fit'].filter(Boolean);
+    setText('sumDisplay', ov.length ? ov.join(' · ') : 'grid, circle, basis');
+    const T = trainer, h = T ? T.lossHistory : [];
+    setText('sumTraining', `${TASK_NAMES[S.train.target]}${training ? ' · training…' : T && T.step_ ? ` · step ${T.step_}` : ''}`);
+    setText('sumLoss', h.length ? fmt(h[h.length - 1]) : '');
+    setText('sumInspector', `layer ${inspect.layer} · ${net.acts[inspect.layer - 1] || ''}`);
+  }
+
+  function setupHelp() {
+    $('helpBtn').onclick = (e) => { e.stopPropagation(); $('helpPanel').classList.toggle('hidden'); };
+    document.addEventListener('click', (e) => { if (!e.target.closest('#helpPanel')) $('helpPanel').classList.add('hidden'); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') $('helpPanel').classList.add('hidden'); });
+  }
+
+  function setupShortcuts() {
+    document.addEventListener('keydown', (e) => {
+      const tag = (e.target.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'select' || tag === 'textarea' || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.key === ' ') { e.preventDefault(); $('play').click(); }
+      else if (e.key === 'ArrowRight') { e.preventDefault(); $('stepFwd').click(); }
+      else if (e.key === 'ArrowLeft') { e.preventDefault(); $('stepBack').click(); }
+      else if (e.key === 't' || e.key === 'T') $('trainPlay').click();
+    });
+  }
+
   function onResize() {
     viz2.resize();
     if (viz3) viz3.resize();
     analysisDirty = true;
+    inspect.key = '';
   }
 
   function init() {
+    setupSections();
     setupControls();
     setupTooltips();
+    setupInspector();
+    setupShortcuts();
+    setupHelp();
     bind2DMouse();
     rebuildNet();
     addExamples();
@@ -1682,7 +1908,8 @@
     requestAnimationFrame(frame);
     window.__app = { get S() { return S; }, get net() { return net; }, get trainer() { return trainer; }, setDim, importState,
       get t() { return t; }, set t(v) { t = v; }, setTool, finishDrawing, get traces() { return traces; },
-      serializeState, get training() { return training; }, set training(v) { training = v; }, viz2 };
+      serializeState, get training() { return training; }, set training(v) { training = v; }, viz2,
+      selectLayer, get inspect() { return inspect; }, get history() { return history; } };
   }
 
   init();

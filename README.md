@@ -19,21 +19,27 @@ only to draw the 3D view.
 
 1. **Watch a network bend space.** Press ▶ under the view: the grid, the unit circle and the example
    objects go through each layer — first the linear map, then the activation.
-2. **Send each class to a point.** Training → Task *send each class to a point*, Data *spirals*, press
+2. **Look inside a layer.** Press **◫ Network** under the view and click a layer in the diagram. The
+   *Layer inspector* on the right shows its weight matrix `W` and bias `b` as a heatmap (blue +, red −),
+   its activation function with the derivative and a histogram of where the points actually land, and
+   how every weight moved during training. Double-click a weight, type a new value and watch the
+   deformation change.
+3. **Send each class to a point.** Training → Task *send each class to a point*, Data *spirals*, press
    **★ Recommended**, then **▶ Train**. Blue points are pulled to (1, 0), red points to (−1, 0); at the
    output the whole plane collapses onto the segment between them.
-3. **Topology experiments: what a network can and cannot do.** The *Topology experiments* table shows for
+4. **Topology experiments: what a network can and cannot do.** The *Topology experiments* table shows for
    every experiment whether it works at width *d* and with one extra dimension. Click one (e.g. 3D →
    *Ball out of the shell*), run **Width 3 — expected: fails**, then **Width 4 — expected: works**; the
    result line under the buttons says whether your run solved it. Watch "worst point off by" —
    it is measured on a 50× finer copy of the shape, because the network otherwise cheats by stretching
    the piece of a curve between two training points around the obstacle.
-4. **Catastrophic forgetting.** Task *pinned points*, drag a few pins, Mode *sequential*, train with
+5. **Catastrophic forgetting.** Task *pinned points*, drag a few pins, Mode *sequential*, train with
    anti-forgetting *none*, then with *replay*, *OGD* or *EWC*, and compare the Forgetting table.
 
 ![Forward view: a tanh network half-way through layer 2, with Jacobian ellipses](docs/screenshot-2d.png)
 ![Training: where the network sends each input (background), loss curve and gradient interference](docs/screenshot-train.png)
 ![3D view](docs/screenshot-3d.png)
+![Network diagram and layer inspector: weights, activation with point histogram, weight history](docs/screenshot-inspector.png)
 
 ## What it shows
 
@@ -42,6 +48,13 @@ only to draw the 3D view.
   the unit circle/sphere, the basis vectors and the origin. Move the stage slider to see the objects
   after each layer — every layer is split into its **linear** step (`z = W a + b`) and its
   **activation** step (`a = σ(z)`), with a smooth morph in between.
+- **Network diagram and layer inspector.** A strip under the view draws the network: one column per
+  layer, edges coloured and weighted by `W` (blue positive, red negative), neurons filled by their value
+  at the probe point. Click a layer to inspect it: `W`/`b` heatmap with the change since initialization
+  under each cell, singular values, rank, `det W`, norms; the activation `σ(z)` and `σ′(z)` with a
+  histogram of the pre-activations `z` (and a note such as "26 % of the values are in the flat tails of
+  tanh"); and the history of every weight of the layer over training. Any weight or bias can be edited
+  by double-clicking it.
 - **Overlays.** Local Jacobian ellipses (how a tiny circle is deformed), the sign of `det J`
   (green = orientation kept, red = mirrored, i.e. a fold) and the distance each point moved.
 - **Network.** 1–8 layers, hidden width 1–16 (wider layers are shown through a PCA projection),
@@ -73,6 +86,9 @@ only to draw the 3D view.
 - **You stay in control.** Nothing changes your settings or the view on its own: zoom with the wheel,
   pan by dragging. One button, **★ Recommended**, aligns everything to settings that work well for the
   current task and data (layers, width, activations, initialization, optimizer) and fits the view.
+- **Interface.** Every panel is a collapsible section with a one-line summary in its header; the less
+  used options sit in sub-groups. Open/closed state is remembered. Keyboard: <kbd>Space</kbd> play/pause,
+  <kbd>←</kbd>/<kbd>→</kbd> step through the layers, <kbd>T</kbd> train; the **?** button shows a quick guide.
 - **Share.** Export/import the full state (architecture, seed, weights, objects, pins, settings) as JSON.
 
 ## Run locally
@@ -101,6 +117,7 @@ src/nn.js       tensor/MLP module: forward, backprop, Jacobians, losses, SGD, Ad
                 datasets, Trainer (joint / sequential, replay, OGD, EWC), analysis helpers
 src/viz2d.js    Canvas renderer (pan/zoom) and small charts (loss, heatmap)
 src/viz3d.js    Three.js renderer with a minimal orbit camera and ray picking
+src/inspector.js network diagram and layer inspector (weight heatmap, activation, weight history)
 src/ui.js       state, controls, traces through the layers, interaction, training loop, panels
 test/           node test of the math in nn.js
 ```

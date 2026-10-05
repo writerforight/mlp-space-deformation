@@ -57,11 +57,52 @@
   #stagebar input[type=range] { flex: 1; }
   #ticks { font-size: 11px; color: var(--muted); min-width: 90px; text-align: right; }
 
-  h2 {
-    font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted);
-    margin: 16px 0 8px; padding-top: 10px; border-top: 1px solid var(--line); font-weight: 600;
+  /* collapsible sections (native <details>): click a header to open / close; state is remembered */
+  details.sec { border-bottom: 1px solid var(--line); }
+  details.sec > summary {
+    list-style: none; cursor: pointer; user-select: none; display: flex; align-items: baseline; gap: 8px;
+    padding: 11px 2px 10px; position: sticky; top: 0; z-index: 2; background: var(--panel);
   }
-  aside h2:first-child { border-top: none; padding-top: 4px; }
+  details.sec > summary::-webkit-details-marker, details.sub > summary::-webkit-details-marker { display: none; }
+  details.sec > summary::before, details.sub > summary::before {
+    content: ""; width: 6px; height: 6px; flex: none; border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted);
+    transform: translateY(-2px) rotate(-45deg); transition: transform 0.15s ease;
+  }
+  details[open] > summary::before { transform: translateY(-3px) rotate(45deg); }
+  .sec-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text); font-weight: 650; white-space: nowrap; }
+  .sec-info { font-size: 11px; color: var(--muted); margin-left: auto; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 58%; }
+  details.sec > summary:hover .sec-title { color: var(--accent); }
+  .sec-body { padding: 0 2px 12px; }
+  details.sub { margin: 8px 0 4px; border: 1px solid var(--line); border-radius: 8px; background: rgba(28, 33, 40, 0.55); }
+  details.sub > summary { list-style: none; cursor: pointer; user-select: none; display: flex; align-items: center; gap: 8px;
+    padding: 6px 10px; font-size: 12px; color: var(--muted); font-weight: 550; }
+  details.sub > summary:hover { color: var(--text); }
+  details.sub[open] > summary { border-bottom: 1px solid var(--line); color: var(--text); }
+  details.sub > :not(summary) { margin-left: 10px; margin-right: 10px; }
+  details.sub > :last-child { margin-bottom: 8px; }
+  .group-label { font-size: 11px; color: var(--muted); margin: 10px 0 2px; font-weight: 550; letter-spacing: 0.02em; }
+  .checks.single { grid-template-columns: 1fr; }
+  .status { font-size: 12px; color: var(--text); background: var(--panel2); border-radius: 6px; padding: 5px 8px; margin: 6px 0; min-height: 1em; }
+  .status:empty { display: none; }
+  .train-btns button { flex: 1; }
+  /* network diagram */
+  #netStrip { height: 128px; border-top: 1px solid var(--line); background: var(--panel); position: relative; }
+  #netCanvas { width: 100%; height: 100%; display: block; cursor: pointer; }
+  /* layer inspector */
+  .insp-head { display: flex; align-items: center; gap: 6px; margin: 2px 0 4px; }
+  .insp-title { flex: 1; text-align: center; font-weight: 600; }
+  .insp-title .tag { display: block; font-weight: 400; }
+  canvas.wmat { height: 170px; cursor: cell; }
+  .cell-edit { position: fixed; z-index: 20; width: 72px; font: 12px ui-monospace, monospace; padding: 2px 4px;
+    background: var(--bg); color: var(--text); border: 1px solid var(--accent); border-radius: 4px; }
+  header { position: relative; }
+  #helpBtn { width: 28px; padding: 4px 0; border-radius: 50%; }
+  #helpPanel { position: absolute; top: 44px; right: 14px; z-index: 30; width: 380px; max-width: calc(100vw - 28px);
+    background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; box-shadow: 0 12px 32px rgba(0,0,0,0.5); }
+  #helpPanel ol { margin: 4px 0 10px; padding-left: 18px; } #helpPanel li { margin: 4px 0; }
+  .help-title { font-weight: 650; margin: 2px 0 4px; }
+  kbd { font: 11px ui-monospace, monospace; background: var(--panel2); border: 1px solid var(--line); border-bottom-width: 2px;
+    border-radius: 4px; padding: 0 4px; }
   .row { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
   .row > label:first-child { width: 96px; flex: none; color: var(--muted); }
   .row input[type=range] { flex: 1; min-width: 60px; }
@@ -136,7 +177,7 @@
     #controls { max-height: calc(100vh - 47px); }
     #analysis { grid-column: 1 / -1; border-left: none; border-top: 1px solid var(--line);
       display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 0 18px; }
-    #analysis h2:first-child { border-top: 1px solid var(--line); padding-top: 10px; }
+    #analysis details.sec > summary { position: static; }
   }
   @media (max-width: 760px) {
     #app { grid-template-columns: 1fr; }
@@ -157,130 +198,192 @@
   <button id="exportBtn" data-tip="Download the full setup (architecture, seed, weights, objects, pins, settings) as JSON.">Export JSON</button>
   <button id="importBtn" data-tip="Load a setup exported with “Export JSON”.">Import JSON</button>
   <input id="importFile" type="file" accept="application/json,.json" class="hidden">
+  <button id="helpBtn" data-tip="Quick guide and keyboard shortcuts">?</button>
   <a href="https://github.com/writerforight/mlp-space-deformation" target="_blank" rel="noopener">GitHub</a>
+  <div id="helpPanel" class="hidden">
+    <div class="help-title">Quick guide</div>
+    <ol>
+      <li><b>Look:</b> press ▶ under the view — objects and the grid go through every layer (linear step, then activation).</li>
+      <li><b>Inspect:</b> open <b>◫ Network</b>, click a layer — the right panel shows its weights, activation and history. Double-click a weight to change it.</li>
+      <li><b>Train:</b> Training → pick a task, press <b>★ Recommended</b>, then <b>▶ Train</b>.</li>
+      <li><b>Topology:</b> open <i>Topology experiments</i> to see what an invertible network cannot do — and what one extra dimension changes.</li>
+    </ol>
+    <div class="help-title">Keyboard</div>
+    <div class="kv"><span><kbd>Space</kbd></span><span>play / pause the layer animation</span>
+      <span><kbd>←</kbd> <kbd>→</kbd></span><span>previous / next sub-step</span>
+      <span><kbd>T</kbd></span><span>start / pause training</span>
+      <span>wheel, drag</span><span>zoom, pan (2D) · rotate (3D)</span></div>
+  </div>
 </header>
 
 <div id="app">
   <!-- ======================= left: controls ======================= -->
   <aside id="controls">
-    <h2>Network</h2>
-    <div class="row"><label data-tip="Number of layers; each layer is a linear map followed by an activation.">Layers</label>
-      <input id="layers" type="range" min="1" max="8" step="1"><span class="val" id="layersVal"></span></div>
-    <div class="row"><label data-tip="Width of the hidden layers. With width = input dimension every layer can be drawn directly; wider layers are shown through a PCA projection.">Hidden width</label>
-      <input id="width" type="range" min="1" max="16" step="1"><span class="val" id="widthVal"></span></div>
-    <div class="row"><label data-tip="Activation used by every layer when temperature is 0 (unless a layer is set manually below).">Default act.</label>
-      <select id="defaultAct"></select></div>
-    <div class="row"><label data-tip="0: every layer uses the default activation. 1: each layer picks uniformly at random from the list (fixed by the seed).">Temperature</label>
-      <input id="temperature" type="range" min="0" max="1" step="0.05"><span class="val" id="temperatureVal"></span></div>
-    <div class="checks" style="grid-template-columns:1fr">
-      <label data-tip="Make the last layer linear (identity activation) — usually what you want when training regression or classification outputs."><input id="outputLinear" type="checkbox"> Linear output layer</label>
-      <label data-tip="After every training step, keep each square weight matrix invertible (smallest singular value ≥ 0.2). With width = input dimension and tanh/sigmoid/identity the network is then a homeomorphism: it can bend space but never tear or glue it."><input id="homeo" type="checkbox"> Keep layers invertible (homeomorphism)</label>
-    </div>
-    <div class="note" id="netNote"></div>
-    <div id="layerActs"></div>
-    <div class="row"><label data-tip="Distribution of the random initial weights. Xavier/He scale the spread by the layer sizes.">Init</label>
-      <select id="initDist"><option value="normal">normal</option><option value="uniform">uniform</option><option value="xavier">Xavier</option><option value="he">He</option></select></div>
-    <div class="row"><label data-tip="Multiplies the spread of the initial weights: small = gentle maps, large = strong stretching and folding.">Init scale</label>
-      <input id="initScale" type="range" min="0.1" max="3" step="0.05"><span class="val" id="initScaleVal"></span></div>
-    <div class="row"><label data-tip="Random seed: the same seed always gives the same weights and the same random activations.">Seed</label>
-      <input id="seed" type="number" min="0" step="1"><button id="resample" data-tip="Draw new random weights (next seed).">Resample</button></div>
+    <!-- Network -->
+    <details class="sec" data-sec="network" open>
+      <summary><span class="sec-title">Network</span><span class="sec-info" id="sumNetwork"></span></summary>
+      <div class="sec-body">
+        <div class="row"><label data-tip="Number of layers; each layer is a linear map followed by an activation.">Layers</label>
+          <input id="layers" type="range" min="1" max="8" step="1"><span class="val" id="layersVal"></span></div>
+        <div class="row"><label data-tip="Width of the hidden layers. With width = input dimension every layer can be drawn directly; wider layers are shown through a PCA projection.">Hidden width</label>
+          <input id="width" type="range" min="1" max="16" step="1"><span class="val" id="widthVal"></span></div>
+        <div class="row"><label data-tip="Activation used by every layer (unless a layer is set manually under “Per-layer activations”).">Activation</label>
+          <select id="defaultAct"></select></div>
+        <div class="checks single">
+          <label data-tip="Make the last layer linear (identity activation) — usually what you want when training regression or classification outputs."><input id="outputLinear" type="checkbox"> Linear output layer</label>
+          <label data-tip="After every training step, keep each square weight matrix invertible (smallest singular value ≥ 0.2). With width = input dimension and tanh/sigmoid/identity the network is then a homeomorphism: it can bend space but never tear or glue it."><input id="homeo" type="checkbox"> Keep layers invertible (homeomorphism)</label>
+        </div>
+        <div class="note" id="netNote"></div>
+        <details class="sub" data-sec="net-acts">
+          <summary>Per-layer activations</summary>
+          <div class="row"><label data-tip="0: every layer uses the chosen activation. 1: each layer picks uniformly at random from the list (fixed by the seed).">Temperature</label>
+            <input id="temperature" type="range" min="0" max="1" step="0.05"><span class="val" id="temperatureVal"></span></div>
+          <div id="layerActs"></div>
+        </details>
+        <details class="sub" data-sec="net-init">
+          <summary>Initialization</summary>
+          <div class="row"><label data-tip="Distribution of the random initial weights. Xavier/He scale the spread by the layer sizes.">Init</label>
+            <select id="initDist"><option value="normal">normal</option><option value="uniform">uniform</option><option value="xavier">Xavier</option><option value="he">He</option></select></div>
+          <div class="row"><label data-tip="Multiplies the spread of the initial weights: small = gentle maps, large = strong stretching and folding.">Init scale</label>
+            <input id="initScale" type="range" min="0.1" max="3" step="0.05"><span class="val" id="initScaleVal"></span></div>
+          <div class="row"><label data-tip="Random seed: the same seed always gives the same weights and the same random activations.">Seed</label>
+            <input id="seed" type="number" min="0" step="1"><button id="resample" data-tip="Draw new random weights (next seed).">Resample</button></div>
+        </details>
+      </div>
+    </details>
 
-    <h2>Objects</h2>
-    <div class="note" id="toolNote"></div>
-    <div class="row"><label data-tip="Each drawn object is resampled to this many points, connected in order so stretching and folding stay visible.">Points</label>
-      <input id="nPoints" type="range" min="200" max="500" step="10"><span class="val" id="nPointsVal"></span></div>
-    <div id="sphereControls" class="hidden">
-      <div class="row"><label data-tip="Centre and radius of the sphere to add or to draw on.">Sphere</label>
-        <input id="sx" type="number" step="0.1" value="0"><input id="sy" type="number" step="0.1" value="0"><input id="sz" type="number" step="0.1" value="0"></div>
-      <div class="row"><label>Radius</label><input id="sr" type="number" step="0.1" min="0.05" value="0.6">
-        <button id="addSphere" data-tip="Add a sphere sampled with the Fibonacci spiral, points connected in spiral order.">Add sphere</button></div>
-    </div>
-    <div class="row"><label data-tip="Ready-made shapes for topology experiments; they are added as objects and pushed through the network.">Shape</label>
-      <select id="shapeSel"></select><button id="addShape">Add</button></div>
-    <div id="objList"></div>
-    <div id="pinList"></div>
-    <div class="btns"><button id="clearObjects" data-tip="Remove all drawn objects (curves, circles, regions, spheres). Pins stay.">Clear objects</button>
-      <button id="clearPins" data-tip="Remove all pinned points.">Clear pins</button>
-      <button id="examples" data-tip="Add a few example objects.">Add examples</button></div>
+    <!-- Objects -->
+    <details class="sec" data-sec="objects">
+      <summary><span class="sec-title">Objects</span><span class="sec-info" id="sumObjects"></span></summary>
+      <div class="sec-body">
+        <div class="note" id="toolNote"></div>
+        <div class="row"><label data-tip="Ready-made shapes for topology experiments; they are added as objects and pushed through the network.">Shape</label>
+          <select id="shapeSel"></select><button id="addShape">Add</button></div>
+        <div id="objList"></div>
+        <div id="pinList"></div>
+        <div class="btns"><button id="clearObjects" data-tip="Remove all drawn objects (curves, circles, regions, spheres). Pins stay.">Clear objects</button>
+          <button id="clearPins" data-tip="Remove all pinned points.">Clear pins</button>
+          <button id="examples" data-tip="Add a few example objects.">Add examples</button></div>
+        <details class="sub" data-sec="obj-draw">
+          <summary>Drawing settings</summary>
+          <div class="row"><label data-tip="Each drawn object is resampled to this many points, connected in order so stretching and folding stay visible.">Points</label>
+            <input id="nPoints" type="range" min="200" max="500" step="10"><span class="val" id="nPointsVal"></span></div>
+          <div id="sphereControls" class="hidden">
+            <div class="row"><label data-tip="Centre and radius of the sphere to add or to draw on.">Sphere</label>
+              <input id="sx" type="number" step="0.1" value="0"><input id="sy" type="number" step="0.1" value="0"><input id="sz" type="number" step="0.1" value="0"></div>
+            <div class="row"><label>Radius</label><input id="sr" type="number" step="0.1" min="0.05" value="0.6">
+              <button id="addSphere" data-tip="Add a sphere sampled with the Fibonacci spiral, points connected in spiral order.">Add sphere</button></div>
+          </div>
+        </details>
+      </div>
+    </details>
 
-    <h2>Display</h2>
-    <div class="checks">
-      <label data-tip="Square grid of the input space, pushed through the network."><input id="showGrid" type="checkbox"> Grid</label>
-      <label data-tip="Unit circle (2D) or unit sphere (3D)."><input id="showCircle" type="checkbox"> Unit circle</label>
-      <label data-tip="Basis vectors e1, e2 (e3) as segments from the origin."><input id="showBasis" type="checkbox"> Basis vectors</label>
-      <label data-tip="Where the origin goes."><input id="showOrigin" type="checkbox"> Origin</label>
-      <label data-tip="Image of a small circle under the local Jacobian: shows local stretching, squashing and rotation."><input id="showJac" type="checkbox"> Jacobian ellipses</label>
-      <label data-tip="Colour by the sign of det(J): green keeps orientation, red is mirrored (a fold), grey is collapsed."><input id="showDet" type="checkbox"> det(J) sign</label>
-      <label data-tip="Colour each point by how far it has moved from its input position."><input id="showDist" type="checkbox"> Distance moved</label>
-      <label data-tip="Keep the camera zoomed to the current shapes (hides pure scaling, shows shape)."><input id="autoFit" type="checkbox"> Auto-fit view</label>
-    </div>
-    <div class="btns"><button id="fitBtn" data-tip="Zoom to fit the current shapes.">Fit view</button>
-      <button id="resetView" data-tip="Back to the default zoom.">Reset view</button></div>
+    <!-- Display -->
+    <details class="sec" data-sec="display">
+      <summary><span class="sec-title">Display</span><span class="sec-info" id="sumDisplay"></span></summary>
+      <div class="sec-body">
+        <div class="group-label">Reference</div>
+        <div class="checks">
+          <label data-tip="Square grid of the input space, pushed through the network."><input id="showGrid" type="checkbox"> Grid</label>
+          <label data-tip="Unit circle (2D) or unit sphere (3D)."><input id="showCircle" type="checkbox"> Unit circle</label>
+          <label data-tip="Basis vectors e1, e2 (e3) as segments from the origin."><input id="showBasis" type="checkbox"> Basis vectors</label>
+          <label data-tip="Where the origin goes."><input id="showOrigin" type="checkbox"> Origin</label>
+        </div>
+        <div class="group-label">Overlays</div>
+        <div class="checks">
+          <label data-tip="Image of a small circle under the local Jacobian: shows local stretching, squashing and rotation."><input id="showJac" type="checkbox"> Jacobian ellipses</label>
+          <label data-tip="Colour by the sign of det(J): green keeps orientation, red is mirrored (a fold), grey is collapsed."><input id="showDet" type="checkbox"> det(J) sign</label>
+          <label data-tip="Colour each point by how far it has moved from its input position."><input id="showDist" type="checkbox"> Distance moved</label>
+        </div>
+        <div class="group-label">View</div>
+        <div class="checks single">
+          <label data-tip="Keep the camera zoomed to the current shapes (hides pure scaling, shows shape)."><input id="autoFit" type="checkbox"> Auto-fit view</label>
+        </div>
+        <div class="btns"><button id="fitBtn" data-tip="Zoom to fit the current shapes.">Fit view</button>
+          <button id="resetView" data-tip="Back to the default zoom.">Reset view</button></div>
+      </div>
+    </details>
 
-    <h2>Training</h2>
-    <div class="row"><label data-tip="What the network is trained to do.">Task</label>
-      <select id="target">
-        <option value="none">none (just look)</option>
-        <option value="anchors">send each class to a point</option>
-        <option value="classify">separate classes (logits)</option>
-        <option value="transform">match a linear map</option>
-        <option value="morph">turn one shape into another</option>
-        <option value="pins">pinned points</option>
-      </select></div>
-    <div class="row" id="datasetRow"><label data-tip="Two-class dataset: blue is class 1, red is class 2.">Data</label>
-      <select id="dataset">
-        <optgroup label="Easy"><option value="blobs">two blobs (already separable)</option><option value="moons">two moons</option><option value="circles">disk inside a ring</option></optgroup>
-        <optgroup label="Harder"><option value="xor">XOR</option><option value="wave">wavy boundary</option><option value="rings">three rings</option></optgroup>
-        <optgroup label="Hard"><option value="spirals">spirals</option><option value="checker">checkerboard</option><option value="linked">linked rings (3D)</option></optgroup>
-        <optgroup label="Exact shapes (no noise)"><option value="shape:diskInRing">disk inside a ring (2D)</option><option value="shape:linkedRings">two linked rings (3D)</option><option value="shape:nestedSpheres">ball inside a shell (3D)</option></optgroup>
-        <optgroup label="Your own"><option value="custom">paint your own (2D)</option></optgroup>
-      </select></div>
-    <div class="note" id="datasetNote"></div>
-    <div class="btns" id="customRow"><button id="clearCustom" data-tip="Remove all painted points.">Clear painted points</button><span class="tag" id="customCount"></span></div>
-    <div class="row" id="morphRow"><label data-tip="Point i of the first shape should go to point i of the second (same parametrisation).">Shapes</label>
-      <select id="morphPair"></select></div>
-    <div class="row" id="transformRow"><label data-tip="The linear map A the network should learn: x ↦ A·x.">Map</label>
-      <select id="transform"><option value="rotation">rotation</option><option value="shear">shear</option><option value="scaling">scaling</option></select></div>
-    <div class="row" id="amountRow"><label data-tip="Angle (rotation, radians), shear factor, or scale factor of the target transform.">Amount</label>
-      <input id="amount" type="range" min="-3" max="3" step="0.05"><span class="val" id="amountVal"></span></div>
-    <div class="note" id="targetNote"></div>
-    <div class="row"><label data-tip="SGD: θ ← θ − lr·g.  Adam: per-parameter steps from running averages of g and g².">Optimizer</label>
-      <select id="optimizer"><option value="adam">Adam</option><option value="sgd">SGD</option></select></div>
-    <div class="row"><label data-tip="Step size (log scale).">Learning rate</label>
-      <input id="lr" type="range" min="-4" max="0" step="0.05"><span class="val" id="lrVal"></span></div>
-    <div class="row"><label data-tip="Samples per gradient step.">Batch size</label>
-      <input id="batch" type="range" min="1" max="128" step="1"><span class="val" id="batchVal"></span></div>
-    <div class="row"><label data-tip="Optimisation steps per animation frame.">Steps/frame</label>
-      <input id="stepsPerFrame" type="range" min="1" max="50" step="1"><span class="val" id="stepsPerFrameVal"></span></div>
-    <div class="row"><label data-tip="Re-draw the deformed objects every N steps (smaller = smoother, slower).">Redraw every</label>
-      <input id="redrawEvery" type="range" min="1" max="200" step="1"><span class="val" id="redrawEveryVal"></span></div>
-    <div class="row"><label data-tip="Joint: one loss over all targets. Sequential: train on one target (pin / chunk of data) at a time, like continual learning.">Mode</label>
-      <span class="seg"><button id="modeJoint">joint</button><button id="modeSeq">sequential</button></span></div>
-    <div class="row seqOnly"><label data-tip="Steps spent on each task before moving to the next one.">Steps/task</label>
-      <input id="stepsPerTask" type="range" min="20" max="2000" step="10"><span class="val" id="stepsPerTaskVal"></span></div>
-    <div class="row seqOnly"><label data-tip="Dataset / transform targets are split into this many chunks (tasks) in sequential mode; pins are one task each.">Tasks</label>
-      <input id="nTasks" type="range" min="2" max="8" step="1"><span class="val" id="nTasksVal"></span></div>
-    <div class="row seqOnly"><label data-tip="Replay: mix stored old samples into new batches. OGD: project gradients orthogonal to old output gradients. EWC: penalise moving weights that mattered (Fisher).">Anti-forgetting</label>
-      <select id="method"><option value="none">none</option><option value="replay">replay buffer</option><option value="ogd">orthogonal gradient projection</option><option value="ewc">EWC penalty</option></select></div>
-    <div class="row seqOnly" id="lambdaRow"><label data-tip="Strength λ of the EWC penalty λ/2 Σ F_i (θ_i − θ*_i)² (log scale).">EWC λ</label>
-      <input id="lambda" type="range" min="0" max="4" step="0.05"><span class="val" id="lambdaVal"></span></div>
-    <div class="btns">
-      <button id="trainPlay" class="primary">▶ Train</button><button id="trainStep" data-tip="One optimisation step.">Step</button>
-      <button id="trainReset" data-tip="Re-initialise the weights (same seed) and clear the training history.">Reset</button>
-    </div>
-    <div class="note" id="trainStatus"></div>
+    <!-- Training -->
+    <details class="sec" data-sec="training" open>
+      <summary><span class="sec-title">Training</span><span class="sec-info" id="sumTraining"></span></summary>
+      <div class="sec-body">
+        <div class="row"><label data-tip="What the network is trained to do.">Task</label>
+          <select id="target">
+            <option value="none">none (just look)</option>
+            <option value="anchors">send each class to a point</option>
+            <option value="classify">separate classes (logits)</option>
+            <option value="transform">match a linear map</option>
+            <option value="morph">turn one shape into another</option>
+            <option value="pins">pinned points</option>
+          </select></div>
+        <div class="row" id="datasetRow"><label data-tip="Two-class dataset: blue is class 1, red is class 2.">Data</label>
+          <select id="dataset">
+            <optgroup label="Easy"><option value="blobs">two blobs (already separable)</option><option value="moons">two moons</option><option value="circles">disk inside a ring</option></optgroup>
+            <optgroup label="Harder"><option value="xor">XOR</option><option value="wave">wavy boundary</option><option value="rings">three rings</option></optgroup>
+            <optgroup label="Hard"><option value="spirals">spirals</option><option value="checker">checkerboard</option><option value="linked">linked rings (3D)</option></optgroup>
+            <optgroup label="Exact shapes (no noise)"><option value="shape:diskInRing">disk inside a ring (2D)</option><option value="shape:linkedRings">two linked rings (3D)</option><option value="shape:nestedSpheres">ball inside a shell (3D)</option></optgroup>
+            <optgroup label="Your own"><option value="custom">paint your own (2D)</option></optgroup>
+          </select></div>
+        <div class="note" id="datasetNote"></div>
+        <div class="btns" id="customRow"><button id="clearCustom" data-tip="Remove all painted points.">Clear painted points</button><span class="tag" id="customCount"></span></div>
+        <div class="row" id="morphRow"><label data-tip="Point i of the first shape should go to point i of the second (same parametrisation).">Shapes</label>
+          <select id="morphPair"></select></div>
+        <div class="row" id="transformRow"><label data-tip="The linear map A the network should learn: x ↦ A·x.">Map</label>
+          <select id="transform"><option value="rotation">rotation</option><option value="shear">shear</option><option value="scaling">scaling</option></select></div>
+        <div class="row" id="amountRow"><label data-tip="Angle (rotation, radians), shear factor, or scale factor of the target transform.">Amount</label>
+          <input id="amount" type="range" min="-3" max="3" step="0.05"><span class="val" id="amountVal"></span></div>
+        <div class="note" id="targetNote"></div>
+        <div class="btns train-btns">
+          <button id="trainPlay" class="primary" data-tip="Start / pause training (key T).">▶ Train</button><button id="trainStep" data-tip="One optimisation step.">Step</button>
+          <button id="trainReset" data-tip="Re-initialise the weights (same seed) and clear the training history.">Reset</button>
+        </div>
+        <div class="status" id="trainStatus"></div>
+        <details class="sub" data-sec="train-opt">
+          <summary>Optimizer &amp; speed</summary>
+          <div class="row"><label data-tip="SGD: θ ← θ − lr·g.  Adam: per-parameter steps from running averages of g and g².">Optimizer</label>
+            <select id="optimizer"><option value="adam">Adam</option><option value="sgd">SGD</option></select></div>
+          <div class="row"><label data-tip="Step size (log scale).">Learning rate</label>
+            <input id="lr" type="range" min="-4" max="0" step="0.05"><span class="val" id="lrVal"></span></div>
+          <div class="row"><label data-tip="Samples per gradient step.">Batch size</label>
+            <input id="batch" type="range" min="1" max="128" step="1"><span class="val" id="batchVal"></span></div>
+          <div class="row"><label data-tip="Optimisation steps per animation frame.">Steps/frame</label>
+            <input id="stepsPerFrame" type="range" min="1" max="50" step="1"><span class="val" id="stepsPerFrameVal"></span></div>
+          <div class="row"><label data-tip="Re-draw the deformed objects every N steps (smaller = smoother, slower).">Redraw every</label>
+            <input id="redrawEvery" type="range" min="1" max="200" step="1"><span class="val" id="redrawEveryVal"></span></div>
+        </details>
+        <details class="sub" data-sec="train-cl">
+          <summary>Continual learning</summary>
+          <div class="row"><label data-tip="Joint: one loss over all targets. Sequential: train on one target (pin / chunk of data) at a time, like continual learning.">Mode</label>
+            <span class="seg"><button id="modeJoint">joint</button><button id="modeSeq">sequential</button></span></div>
+          <div class="row seqOnly"><label data-tip="Steps spent on each task before moving to the next one.">Steps/task</label>
+            <input id="stepsPerTask" type="range" min="20" max="2000" step="10"><span class="val" id="stepsPerTaskVal"></span></div>
+          <div class="row seqOnly"><label data-tip="Dataset / transform targets are split into this many chunks (tasks) in sequential mode; pins are one task each.">Tasks</label>
+            <input id="nTasks" type="range" min="2" max="8" step="1"><span class="val" id="nTasksVal"></span></div>
+          <div class="row seqOnly"><label data-tip="Replay: mix stored old samples into new batches. OGD: project gradients orthogonal to old output gradients. EWC: penalise moving weights that mattered (Fisher).">Anti-forgetting</label>
+            <select id="method"><option value="none">none</option><option value="replay">replay buffer</option><option value="ogd">orthogonal gradient projection</option><option value="ewc">EWC penalty</option></select></div>
+          <div class="row seqOnly" id="lambdaRow"><label data-tip="Strength λ of the EWC penalty λ/2 Σ F_i (θ_i − θ*_i)² (log scale).">EWC λ</label>
+            <input id="lambda" type="range" min="0" max="4" step="0.05"><span class="val" id="lambdaVal"></span></div>
+        </details>
+      </div>
+    </details>
 
-    <h2>Topology experiments</h2>
-    <div class="note">Can a network do this? If every layer is invertible and as wide as the space itself,
-      it can only <b>bend and stretch</b> space — never tear or glue it. One <b>extra dimension</b> makes some of
-      the impossible tasks possible. Click an experiment, then run it at both widths.</div>
-    <table id="expTable" class="exp-table"></table>
-    <div class="note exp-legend">✓ works · ✗ impossible · ◐ possible, but training finds it only sometimes / partly</div>
-    <div id="expCard" class="hidden">
-      <div id="expText" class="exp-card"></div>
-      <div class="btns"><button id="expRun"></button><button id="expPlus" class="primary"></button></div>
-      <div id="expResult" class="exp-result"></div>
-    </div>
+    <!-- Topology experiments -->
+    <details class="sec" data-sec="topology">
+      <summary><span class="sec-title">Topology experiments</span><span class="sec-info">what a network can't do</span></summary>
+      <div class="sec-body">
+        <div class="note">Can a network do this? If every layer is invertible and as wide as the space itself,
+          it can only <b>bend and stretch</b> space — never tear or glue it. One <b>extra dimension</b> makes some of
+          the impossible tasks possible. Click an experiment, then run it at both widths.</div>
+        <table id="expTable" class="exp-table"></table>
+        <div class="note exp-legend">✓ works · ✗ impossible · ◐ possible, but training finds it only sometimes / partly</div>
+        <div id="expCard" class="hidden">
+          <div id="expText" class="exp-card"></div>
+          <div class="btns"><button id="expRun"></button><button id="expPlus" class="primary"></button></div>
+          <div id="expResult" class="exp-result"></div>
+        </div>
+      </div>
+    </details>
   </aside>
 
   <!-- ======================= centre: the view ======================= -->
@@ -293,10 +396,14 @@
       <div id="legend" class="hidden"></div>
       <div id="hint"></div>
     </div>
+    <div id="netStrip" class="hidden">
+      <canvas id="netCanvas"></canvas>
+    </div>
     <div id="stagebar">
-      <button id="play" data-tip="Animate through the layers.">▶</button>
-      <button id="stepBack" data-tip="Previous sub-step.">⏮</button>
-      <button id="stepFwd" data-tip="Next sub-step (linear, then activation).">⏭</button>
+      <button id="netToggle" data-tip="Show / hide the network diagram: neurons, weights (blue +, red −) and the values at the probe point. Click a layer to inspect it.">◫ Network</button>
+      <button id="play" data-tip="Animate through the layers (Space).">▶</button>
+      <button id="stepBack" data-tip="Previous sub-step (←).">⏮</button>
+      <button id="stepFwd" data-tip="Next sub-step: linear, then activation (→).">⏭</button>
       <input id="stage" type="range" min="0" max="1" step="0.001" data-tip="Show the objects after layer k: each layer is split into the linear step and the activation step.">
       <span id="ticks"></span>
     </div>
@@ -304,34 +411,65 @@
 
   <!-- ======================= right: analysis ======================= -->
   <aside id="analysis">
-    <section>
-      <h2>Loss</h2>
-      <canvas id="lossChart" class="chart"></canvas>
-      <div class="note" id="lossNote"></div>
-    </section>
-    <section>
-      <h2>Forgetting</h2>
-      <div class="note" data-tip="F_A = L_A(after training on later tasks) − L_A(right after training on A). Positive = forgotten.">F<sub>A</sub> = L<sub>A</sub>(after later tasks) − L<sub>A</sub>(after A)</div>
-      <div id="forgetting"></div>
-    </section>
-    <section>
-      <h2>Interference</h2>
-      <div class="row"><label data-tip="Cosine of per-point loss gradients (+1: training on one helps the other, −1: they fight). NTK: K(xi, xj) = trace(J_i J_jᵀ), J = ∂f/∂θ.">Matrix</label>
-        <select id="matrixKind"><option value="cosine">gradient cosine</option><option value="ntk">NTK trace</option></select></div>
-      <canvas id="heatmap" class="chart square"></canvas>
-      <div class="note" id="heatNote"></div>
-    </section>
-    <section>
-      <h2>Input sensitivity</h2>
-      <div class="row"><label data-tip="Size of the input perturbation used for the finite-difference curve.">ε</label>
-        <input id="eps" type="range" min="-3" max="0" step="0.05"><span class="val" id="epsVal"></span></div>
-      <canvas id="sensChart" class="chart"></canvas>
-      <div class="kv" id="sensInfo"></div>
-    </section>
-    <section>
-      <h2>Invertibility</h2>
-      <div id="layerTable"></div>
-    </section>
+    <details class="sec" data-sec="inspector" open>
+      <summary><span class="sec-title">Layer inspector</span><span class="sec-info" id="sumInspector"></span></summary>
+      <div class="sec-body" id="inspector">
+        <div class="insp-head">
+          <button id="inspPrev" data-tip="Previous layer">‹</button>
+          <div id="inspTitle" class="insp-title"></div>
+          <button id="inspNext" data-tip="Next layer">›</button>
+        </div>
+        <div class="btns"><button id="inspShowLin" data-tip="Move the view to this layer's linear step z = W a + b.">Show linear step</button>
+          <button id="inspShowAct" data-tip="Move the view to this layer's activation step a = σ(z).">Show activation</button></div>
+        <div class="group-label">Weights W and bias b <span class="tag">— double-click a cell to edit</span></div>
+        <canvas id="wCanvas" class="chart wmat"></canvas>
+        <div class="kv" id="wStats"></div>
+        <div class="group-label">Activation σ(z) and where the points are</div>
+        <canvas id="actCanvas" class="chart"></canvas>
+        <div class="note" id="actNote"></div>
+        <div class="group-label">How the weights change during training</div>
+        <canvas id="histCanvas" class="chart"></canvas>
+        <div class="note" id="histNote"></div>
+      </div>
+    </details>
+    <details class="sec" data-sec="loss" open>
+      <summary><span class="sec-title">Loss</span><span class="sec-info" id="sumLoss"></span></summary>
+      <div class="sec-body">
+        <canvas id="lossChart" class="chart"></canvas>
+        <div class="note" id="lossNote"></div>
+      </div>
+    </details>
+    <details class="sec" data-sec="forgetting">
+      <summary><span class="sec-title">Forgetting</span></summary>
+      <div class="sec-body">
+        <div class="note" data-tip="F_A = L_A(after training on later tasks) − L_A(right after training on A). Positive = forgotten.">F<sub>A</sub> = L<sub>A</sub>(after later tasks) − L<sub>A</sub>(after A)</div>
+        <div id="forgetting"></div>
+      </div>
+    </details>
+    <details class="sec" data-sec="interference">
+      <summary><span class="sec-title">Interference</span></summary>
+      <div class="sec-body">
+        <div class="row"><label data-tip="Cosine of per-point loss gradients (+1: training on one helps the other, −1: they fight). NTK: K(xi, xj) = trace(J_i J_jᵀ), J = ∂f/∂θ.">Matrix</label>
+          <select id="matrixKind"><option value="cosine">gradient cosine</option><option value="ntk">NTK trace</option></select></div>
+        <canvas id="heatmap" class="chart square"></canvas>
+        <div class="note" id="heatNote"></div>
+      </div>
+    </details>
+    <details class="sec" data-sec="sensitivity">
+      <summary><span class="sec-title">Input sensitivity</span></summary>
+      <div class="sec-body">
+        <div class="row"><label data-tip="Size of the input perturbation used for the finite-difference curve.">ε</label>
+          <input id="eps" type="range" min="-3" max="0" step="0.05"><span class="val" id="epsVal"></span></div>
+        <canvas id="sensChart" class="chart"></canvas>
+        <div class="kv" id="sensInfo"></div>
+      </div>
+    </details>
+    <details class="sec" data-sec="invertibility">
+      <summary><span class="sec-title">Invertibility</span></summary>
+      <div class="sec-body">
+        <div id="layerTable"></div>
+      </div>
+    </details>
   </aside>
 </div>
 <div id="tip" class="hidden"></div>
@@ -341,6 +479,7 @@
 <script src="src/nn.js"></script>
 <script src="src/viz2d.js"></script>
 <script src="src/viz3d.js"></script>
+<script src="src/inspector.js"></script>
 <script src="src/ui.js"></script>
 </body>
 </html>
