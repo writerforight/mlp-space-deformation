@@ -1750,7 +1750,7 @@
         : act === 'gelu' ? `${frac((z) => z < -0.75)} of the values are below −0.75, where GELU turns back up (folds).`
         : 'Identity: this step changes nothing — the layer is purely linear.';
     }
-    $('actNote').textContent = (zs.length ? 'Grey bars: where the drawn points fall. ' : '') + note;
+    $('actNote').textContent = (zs.length ? 'Now: ' : '') + note;
     Inspector.drawHistory($('histCanvas'), history, Lay);
     $('histNote').textContent = history.length > 1
       ? (history[0].step === history[history.length - 1].step

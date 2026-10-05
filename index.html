@@ -93,6 +93,13 @@
   .insp-title { flex: 1; text-align: center; font-weight: 600; }
   .insp-title .tag { display: block; font-weight: 400; }
   canvas.wmat { height: 170px; cursor: cell; }
+  canvas.act { height: 165px; }
+  details.explain { margin: 4px 0 10px; font-size: 12px; color: var(--muted); }
+  details.explain > summary { cursor: pointer; color: var(--accent); list-style: none; }
+  details.explain > summary::-webkit-details-marker { display: none; }
+  details.explain > summary::before { content: '›'; display: inline-block; width: 12px; transition: transform .15s; }
+  details.explain[open] > summary::before { transform: rotate(90deg); }
+  details.explain p { margin: 6px 0; line-height: 1.45; }
   .cell-edit { position: fixed; z-index: 20; width: 72px; font: 12px ui-monospace, monospace; padding: 2px 4px;
     background: var(--bg); color: var(--text); border: 1px solid var(--accent); border-radius: 4px; }
   header { position: relative; }
@@ -425,8 +432,23 @@
         <canvas id="wCanvas" class="chart wmat"></canvas>
         <div class="kv" id="wStats"></div>
         <div class="group-label">Activation σ(z) and where the points are</div>
-        <canvas id="actCanvas" class="chart"></canvas>
+        <canvas id="actCanvas" class="chart act"></canvas>
         <div class="note" id="actNote"></div>
+        <details class="explain" data-sec="act-help" open>
+          <summary>How to read this chart</summary>
+          <p>The linear step gives every point a number <i>z = W a + b</i> per neuron; the activation turns it
+            into <i>σ(z)</i>. The <b>blue line</b> is σ itself (input z → output). The <b>teal area</b> is its
+            slope σ′(z): tall where σ is steep, near zero where σ is flat. The <b>grey bars</b> show where the
+            points actually are on this layer's z axis (the grid, the objects and the data).</p>
+          <p><b>Points in the steep middle:</b> σ is almost a straight line there, so the layer barely bends
+            space. <b>Points in the shaded flat parts:</b> very different z values are squashed onto almost the
+            same output (≈ ±1 for tanh). This is where space is folded — useful for classification, because a
+            whole class can be pressed onto one value. The price: the slope is ≈ 0, so the gradient hardly
+            passes and that neuron learns slowly (<i>saturation</i>). For ReLU everything below 0 becomes 0;
+            pink regions mark where σ turns back (sin, GELU) and folds space onto itself.</p>
+          <p>Watch the bars while training: when they move from the middle into the flat parts, the network
+            is bending space harder at this layer.</p>
+        </details>
         <div class="group-label">How the weights change during training</div>
         <canvas id="histCanvas" class="chart"></canvas>
         <div class="note" id="histNote"></div>

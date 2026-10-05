@@ -173,7 +173,8 @@
   // Activation function
   // ---------------------------------------------------------------------------
 
-  /** σ(z) (solid), σ'(z) (dashed) and a histogram of the pre-activations z of the drawn points. */
+  /** σ(z) (thick line), σ'(z) (filled teal area), shaded flat / folding regions and a histogram of the
+   *  pre-activations z of the drawn points. */
   function drawActivation(canvas, act, zs) {
     const { ctx, w, h } = prep(canvas);
     const A = NN.ACTIVATIONS[act];
@@ -182,7 +183,7 @@
       const s = zs.slice().sort((a, b) => a - b), q = (p) => s[Math.floor(p * (s.length - 1))];
       lo = Math.min(-3, q(0.01) - 0.5); hi = Math.max(3, q(0.99) + 0.5);
     }
-    const pad = { l: 30, r: 8, t: 8, b: 18 };
+    const pad = { l: 30, r: 8, t: 22, b: 18 };
     const X = (z) => pad.l + ((w - pad.l - pad.r) * (z - lo)) / (hi - lo);
     let ymin = Infinity, ymax = -Infinity;
     const N = 160, fz = [], dz = [];
@@ -194,12 +195,29 @@
     if (ymax - ymin < 1e-6) { ymax += 1; ymin -= 1; }
     const m = 0.08 * (ymax - ymin); ymin -= m; ymax += m;
     const Y = (v) => h - pad.b - ((h - pad.t - pad.b) * (v - ymin)) / (ymax - ymin);
+    // regions where σ is (almost) flat — points there get squashed and gradients vanish — or turns back
+    let dmax = 0;
+    for (const d of dz) dmax = Math.max(dmax, Math.abs(d));
+    const regionAt = (k) => (dz[k] < -1e-9 ? 'fold' : Math.abs(dz[k]) < 0.1 * dmax ? 'flat' : '');
+    ctx.font = '10px ui-sans-serif, system-ui';
+    for (let k = 0; k <= N;) {
+      const r = regionAt(k);
+      let e = k; while (e + 1 <= N && regionAt(e + 1) === r) e++;
+      if (r) {
+        const xa = X(lo + ((hi - lo) * k) / N), xb = X(lo + ((hi - lo) * (e + 1)) / N);
+        ctx.fillStyle = r === 'flat' ? 'rgba(139,148,158,0.10)' : 'rgba(247,120,186,0.10)';
+        ctx.fillRect(xa, pad.t, Math.min(xb, w - pad.r) - xa, h - pad.t - pad.b);
+        const lab = r === 'flat' ? 'flat' : 'turns back';
+        if (xb - xa > ctx.measureText(lab).width + 6) { ctx.fillStyle = C.muted; ctx.fillText(lab, xa + (Math.min(xb, w - pad.r) - xa - ctx.measureText(lab).width) / 2, pad.t + 11); }
+      }
+      k = e + 1;
+    }
     // histogram of where the points are
     if (zs && zs.length) {
       const bins = 48, cnt = new Array(bins).fill(0);
       for (const z of zs) { const k = Math.floor(((z - lo) / (hi - lo)) * bins); if (k >= 0 && k < bins) cnt[k]++; }
       const cm = Math.max(...cnt);
-      ctx.fillStyle = 'rgba(139,148,158,0.28)';
+      ctx.fillStyle = 'rgba(139,148,158,0.30)';
       for (let k = 0; k < bins; k++) {
         if (!cnt[k]) continue;
         const x = X(lo + ((hi - lo) * k) / bins), bw = (w - pad.l - pad.r) / bins, bh = (cnt[k] / cm) * (h - pad.t - pad.b) * 0.9;
@@ -212,17 +230,25 @@
     ctx.fillStyle = C.muted; ctx.font = '10px ui-monospace, monospace';
     ctx.fillText(ymax.toFixed(1), 2, pad.t + 8); ctx.fillText(ymin.toFixed(1), 2, h - pad.b);
     ctx.fillText(lo.toFixed(1), pad.l, h - 4); ctx.fillText(hi.toFixed(1), w - pad.r - 22, h - 4); ctx.fillText('z', X(0) + 4, h - 4);
-    const curve = (arr, color, dash) => {
-      ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.setLineDash(dash || []);
+    const path = (arr) => {
       ctx.beginPath();
       arr.forEach((v, k) => { const x = X(lo + ((hi - lo) * k) / N), y = Y(v); k ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
-      ctx.stroke(); ctx.setLineDash([]);
     };
-    curve(dz, 'rgba(201,209,217,0.8)', [4, 4]);
-    curve(fz, C.accent);
-    ctx.fillStyle = 'rgba(13,17,23,0.75)'; ctx.fillRect(pad.l + 4, pad.t, 92, 28);
-    ctx.fillStyle = C.accent; ctx.fillText(`— ${act}(z)`, pad.l + 8, pad.t + 11);
-    ctx.fillStyle = 'rgba(201,209,217,0.95)'; ctx.fillText(`- - ${act}′(z)`, pad.l + 8, pad.t + 23);
+    // σ′: filled area down to 0 plus a thin line
+    const TEAL = [63, 185, 160];
+    path(dz); ctx.lineTo(X(hi), Y(0)); ctx.lineTo(X(lo), Y(0)); ctx.closePath();
+    ctx.fillStyle = rgba(TEAL, 0.22); ctx.fill();
+    path(dz); ctx.strokeStyle = rgba(TEAL, 0.95); ctx.lineWidth = 1.5; ctx.stroke();
+    // σ: thick line
+    path(fz); ctx.strokeStyle = C.accent; ctx.lineWidth = 3; ctx.stroke();
+    // legend above the plot
+    ctx.font = '11px ui-sans-serif, system-ui';
+    let lx = pad.l;
+    ctx.fillStyle = C.accent; ctx.fillRect(lx, 8, 16, 3); lx += 21;
+    ctx.fillStyle = C.text; ctx.fillText(`${act}(z)  output`, lx, 13); lx += ctx.measureText(`${act}(z)  output`).width + 14;
+    ctx.fillStyle = rgba(TEAL, 0.5); ctx.fillRect(lx, 4, 16, 10); ctx.fillStyle = rgba(TEAL, 1); ctx.fillRect(lx, 4, 16, 1.5); lx += 21;
+    ctx.fillStyle = C.text; ctx.fillText(`${act}′(z)  slope`, lx, 13); lx += ctx.measureText(`${act}′(z)  slope`).width + 14;
+    if (zs && zs.length && lx + 70 < w) { ctx.fillStyle = 'rgba(139,148,158,0.5)'; ctx.fillRect(lx, 4, 8, 10); ctx.fillStyle = C.muted; ctx.fillText('points', lx + 12, 13); }
   }
 
   // ---------------------------------------------------------------------------
