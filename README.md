@@ -1,18 +1,36 @@
 # Neural Space Deformation
 
-An interactive, browser-only visualization of **what a small neural network does geometrically**:
-every layer bends, stretches, folds and squashes space — and backpropagation reshapes those
-deformations while it trains.
+**Neural Space Deformation is an interactive, browser-only visualization of what a small neural network
+(MLP) does geometrically:** every layer bends, stretches, folds and squashes space, and backpropagation
+reshapes those deformations while it trains. It was built by
+[Eren Can Almaz](https://writerforight.github.io), an Electrical Engineering student at RWTH Aachen
+University.
 
-**Live demo:** https://writerforight.github.io/mlp-space-deformation/
+**▶ Live demo: https://writerforight.github.io/mlp-space-deformation/**
 
-No backend, no build step, no ML libraries. The MLP, backpropagation, SGD, Adam, PCA and every
-analysis are written from first principles in plain JavaScript (`src/nn.js`, with comments).
-Three.js (from a CDN) is used only to draw the 3D view.
+![A grid, the unit circle and two drawn objects pushed through a 3-layer tanh network, one sub-step at a time](docs/deformation.gif)
+
+There is no backend, no build step and no machine-learning library. The MLP, backpropagation, SGD,
+Adam, Jacobians, PCA, the neural tangent kernel and the continual-learning methods are written from
+first principles in plain JavaScript (`src/nn.js`, with comments). Three.js (loaded from a CDN) is used
+only to draw the 3D view.
+
+## Things to try
+
+1. **Watch a network bend space.** Press ▶ under the view: the grid, the unit circle and the example
+   objects go through each layer — first the linear map, then the activation.
+2. **Send each class to a point.** Training → Task *send each class to a point*, Data *spirals*, press
+   **★ Recommended**, then **▶ Train**. Blue points are pulled to (1, 0), red points to (−1, 0); at the
+   output the whole plane collapses onto the segment between them.
+3. **Why width matters.** Switch to **3D**, Data *linked rings*, ★ Recommended, train, then set the
+   hidden width to 3 and train again. With width 3 the rings cannot be unlinked without crushing a
+   dimension (the Invertibility panel flags it); with width 4 they separate cleanly.
+4. **Catastrophic forgetting.** Task *pinned points*, drag a few pins, Mode *sequential*, train with
+   anti-forgetting *none*, then with *replay*, *OGD* or *EWC*, and compare the Forgetting table.
 
 ![Forward view: a tanh network half-way through layer 2, with Jacobian ellipses](docs/screenshot-2d.png)
-![Training on two moons: learned decision regions in input space, loss curve and gradient interference](docs/screenshot-train.png)
-![3D view: a sphere and the unit sphere after the first tanh layer](docs/screenshot-3d.png)
+![Training: where the network sends each input (background), loss curve and gradient interference](docs/screenshot-train.png)
+![3D view](docs/screenshot-3d.png)
 
 ## What it shows
 
@@ -164,6 +182,16 @@ Training on task B after task A can raise A's loss again. The app measures
 Layers wider than the view dimension are drawn through their top two (or three) principal
 components. The axis signs are aligned with the previous stage so the animation does not flip, and the
 label shows how much of the variance the projection keeps.
+
+## Author
+
+**Eren Can Almaz** — Electrical Engineering (Elektrotechnik) student at RWTH Aachen University.
+GitHub [@writerforight](https://github.com/writerforight) · website
+[writerforight.github.io](https://writerforight.github.io). Also by the author:
+[Ders Transkript](https://github.com/writerforight/ders-transkript), an offline lecture-transcription app.
+
+If you use this in teaching or writing, please cite it — GitHub's **Cite this repository** button
+(from [`CITATION.cff`](CITATION.cff)) gives the reference.
 
 ## License
 

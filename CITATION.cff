@@ -1,0 +1,21 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "Neural Space Deformation: an interactive visualization of how neural networks deform space"
+abstract: "Browser-only, interactive visualization of how a small multilayer perceptron deforms space layer by layer and how backpropagation reshapes it, including Jacobians, the neural tangent kernel, topology and width, and catastrophic forgetting with replay, orthogonal gradient descent and EWC. Written from first principles in plain JavaScript."
+authors:
+  - family-names: "Almaz"
+    given-names: "Eren Can"
+    affiliation: "RWTH Aachen University"
+    website: "https://writerforight.github.io"
+repository-code: "https://github.com/writerforight/mlp-space-deformation"
+url: "https://writerforight.github.io/mlp-space-deformation/"
+license: MIT
+date-released: "2026-10-04"
+keywords:
+  - neural networks
+  - visualization
+  - backpropagation
+  - jacobian
+  - neural tangent kernel
+  - catastrophic forgetting
+  - topology
