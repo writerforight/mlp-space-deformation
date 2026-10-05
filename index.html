@@ -108,6 +108,20 @@
   .kv { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; font-size: 12px; margin: 6px 0; }
   .kv span:nth-child(odd) { color: var(--muted); }
   .hidden { display: none !important; }
+  /* topology experiments */
+  .exp-table { margin: 8px 0 4px; }
+  .exp-table tr[data-i] { cursor: pointer; }
+  .exp-table tr[data-i]:hover td { background: var(--panel2); }
+  .exp-table tr.sel td { background: rgba(31, 111, 235, 0.22); }
+  .exp-table td.oc { white-space: nowrap; }
+  .ok { color: var(--good); } .no { color: var(--bad); } .mid { color: var(--warn); }
+  .exp-legend { margin-top: 2px; }
+  .exp-card { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin: 8px 0; font-size: 12px; }
+  .exp-title { font-weight: 650; font-size: 13px; margin-bottom: 4px; }
+  .exp-row { display: grid; grid-template-columns: 58px 14px 1fr; gap: 2px 6px; margin: 4px 0; }
+  .exp-row > span:first-child { color: var(--muted); }
+  .exp-row > span:nth-child(2):last-child { grid-column: 2 / 4; }
+  .exp-result { font-size: 12px; font-weight: 600; margin: 4px 0; }
   #tip {
     position: fixed; z-index: 10; max-width: 280px; padding: 6px 9px; border-radius: 6px; pointer-events: none;
     background: #2d333b; border: 1px solid var(--line); color: var(--text); font-size: 12px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
@@ -257,13 +271,15 @@
     <div class="note" id="trainStatus"></div>
 
     <h2>Topology experiments</h2>
-    <div class="note">What can a network do to space? With width = dimension and invertible layers it is a
-      homeomorphism — it bends but never tears or glues. Each experiment runs at that limit; “+1 dimension”
-      gives it one extra dimension to work in.</div>
-    <div id="expList" class="btns"></div>
+    <div class="note">Can a network do this? If every layer is invertible and as wide as the space itself,
+      it can only <b>bend and stretch</b> space — never tear or glue it. One <b>extra dimension</b> makes some of
+      the impossible tasks possible. Click an experiment, then run it at both widths.</div>
+    <table id="expTable" class="exp-table"></table>
+    <div class="note exp-legend">✓ works · ✗ impossible · ◐ possible, but training finds it only sometimes / partly</div>
     <div id="expCard" class="hidden">
-      <div class="note" id="expText"></div>
-      <div class="btns"><button id="expRun" class="primary">Run at width d</button><button id="expPlus" data-tip="Same experiment with one extra hidden dimension (width d + 1).">+1 dimension</button></div>
+      <div id="expText" class="exp-card"></div>
+      <div class="btns"><button id="expRun"></button><button id="expPlus" class="primary"></button></div>
+      <div id="expResult" class="exp-result"></div>
     </div>
   </aside>
 

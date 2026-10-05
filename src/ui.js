@@ -980,6 +980,7 @@
     if (T.diverged) parts.push('diverged — lower the learning rate and press Reset');
     if (!T.tasks.length) parts.push(S.train.target === 'pins' ? 'add pins with the Pin tool' : 'choose a target');
     el.textContent = parts.join(' · ');
+    renderExpResult();
   }
 
   /** One plain sentence saying what the chosen task asks the network to do. */
@@ -1315,65 +1316,109 @@
    * invertible layers (homeomorphism mode), tanh.  "+1 dimension" repeats it with width d + 1.
    * The measured numbers come from test/topology_experiments.js (4 layers, 6000 Adam steps).
    */
+  /*
+   * Each experiment runs at the limit of what a homeomorphism can do (width = d, invertible layers,
+   * tanh) and again with one extra hidden dimension.  Outcomes: 'works' | 'fails' | 'sometimes' |
+   * 'partly'.  Numbers come from test/topology_experiments.js ("worst" = worst point on a 50× finer
+   * copy of the shape).
+   */
   const EXPERIMENTS = {
     2: [
-      { title: 'Circle → square', task: 'morph', morph: 'circle>square', verdict: 'possible', layers: 4, lr: 0.01, seed: 1,
-        text: 'Control: a circle and a square are homeomorphic, so a width-2 invertible network can do it.',
-        measured: 'width 2: worst point 0.10–0.14 in 4/4 runs' },
-      { title: 'Disk out of the ring', task: 'anchors', dataset: 'shape:diskInRing', verdict: 'impossible', layers: 4, lr: 0.01, seed: 1,
-        text: 'Send the disk to (1, 0) and the ring to (−1, 0). A homeomorphism of the plane cannot move the disk across the ring, so some point always ends up at the wrong target.',
-        measured: 'width 2: worst point 1.5–2.1 in 4/4 runs; width 3: ≤ 0.25 in 4/4' },
-      { title: 'Two circles → one', task: 'morph', morph: 'twoCircles>oneCircleTwice', verdict: 'impossible', layers: 4, lr: 0.01, seed: 1,
-        text: 'Merge two separate circles into one: that glues points together, which an invertible map cannot do.',
-        measured: 'width 2: worst point 1.1–1.7 in 4/4 runs; width 3: ≤ 0.02 in 4/4 (the final layer back to 2D can glue)' },
-      { title: 'Circle → figure eight', task: 'morph', morph: 'circle>figure8', verdict: 'impossible', layers: 4, lr: 0.01, seed: 1,
-        text: 'The figure eight crosses itself: two points of the circle must land on the same point.',
-        measured: 'width 2: worst point 0.47–0.65 in 4/4 runs; width 3: ≤ 0.02 in 4/4' },
+      { title: 'Circle → square', task: 'morph', morph: 'circle>square', layers: 4, lr: 0.01, seed: 1,
+        goal: 'Turn a circle into a square.',
+        atD: 'Works: a circle and a square are the same shape topologically — only bending is needed.',
+        plus: 'Works too (control experiment).',
+        d: 'works', d1: 'works', measured: 'width 2: worst 0.10–0.14 (4 of 4 runs) · width 3: ≤ 0.07' },
+      { title: 'Disk out of the ring', task: 'anchors', dataset: 'shape:diskInRing', layers: 4, lr: 0.01, seed: 1,
+        goal: 'Send the disk to (1, 0) and the ring around it to (−1, 0).',
+        atD: 'Fails: the disk would have to cross the ring. Bending the plane can never move something out of a closed ring.',
+        plus: 'Works: in 3D the disk simply lifts over the ring.',
+        d: 'fails', d1: 'works', measured: 'width 2: worst 1.5–2.1 (0 of 4 runs solved) · width 3: ≤ 0.25 (4 of 4)' },
+      { title: 'Two circles → one', task: 'morph', morph: 'twoCircles>oneCircleTwice', layers: 4, lr: 0.01, seed: 1,
+        goal: 'Merge two separate circles into one circle.',
+        atD: 'Fails: merging glues two different points onto one — an invertible map never does that.',
+        plus: 'Works: the last layer goes from 3D back to 2D, and that projection can put two points on top of each other.',
+        d: 'fails', d1: 'works', measured: 'width 2: worst 1.1–1.7 (0 of 4) · width 3: ≤ 0.02 (4 of 4)' },
+      { title: 'Circle → figure eight', task: 'morph', morph: 'circle>figure8', layers: 4, lr: 0.01, seed: 1,
+        goal: 'Turn a circle into a figure eight (∞).',
+        atD: 'Fails: the figure eight crosses itself, so two points of the circle must land on the same spot (gluing).',
+        plus: 'Works: in 3D the curve crosses over itself; projected back to 2D it looks like the ∞.',
+        d: 'fails', d1: 'works', measured: 'width 2: worst 0.47–0.65 (0 of 4) · width 3: ≤ 0.02 (4 of 4)' },
     ],
     3: [
-      { title: 'Sphere → ellipsoid', task: 'morph', morph: 'sphere>ellipsoid', verdict: 'possible', layers: 4, lr: 0.01, seed: 1,
-        text: 'Control: a stretched, tilted sphere is homeomorphic to the sphere.',
-        measured: 'width 3: worst point ≤ 0.02 in 4/4 runs' },
-      { title: 'Unlink the rings', task: 'anchors', dataset: 'shape:linkedRings', verdict: 'impossible', layers: 8, lr: 0.003, seed: 1,
-        text: 'Send one ring to (1, 0, 0) and the other to (−1, 0, 0). No homeomorphism of 3D space unlinks two linked rings; in 4D one ring can pass the other. A long run at width 3 can still “solve” the 400 training points by stretching the piece of a ring between two of them around the other ring — the finer check catches it.',
-        measured: 'width 3: worst point ≈ 2 in 4/4 runs; width 4: solved in 2 of 8 runs (this seed is one of them) — possible, but hard to find' },
-      { title: 'Ball out of the shell', task: 'anchors', dataset: 'shape:nestedSpheres', verdict: 'impossible', layers: 6, lr: 0.003, seed: 1,
-        text: 'Separate a ball from the shell around it — the 3D version of the disk in the ring.',
-        measured: 'width 3: worst point 1.9–2.1 in 4/4 runs; width 4: ≤ 0.07 in 4/4' },
-      { title: 'Unknot → trefoil', task: 'morph', morph: 'unknot>trefoil', verdict: 'impossible', layers: 4, lr: 0.01, seed: 3,
-        text: 'A plain ring and a trefoil knot are the same curve on their own, but no homeomorphism of 3D space ties a knot. In 4D every knot can be undone.',
-        measured: 'width 3: worst point 0.37–0.51 (stuck at the crossings) in 4/4 runs; width 4: ≤ 0.04 in 3 of 4 runs (this seed is one of them)' },
-      { title: 'Torus → sphere', task: 'morph', morph: 'torus>torusOnSphere', verdict: 'impossible', layers: 4, lr: 0.01, seed: 1,
-        text: 'Closing the hole of a torus means folding the whole tube onto itself (two points onto one, everywhere). A homeomorphism cannot; with an extra dimension the final layer back to 3D can glue, but this fold is much harder to learn than the others.',
-        measured: 'width 3: worst point 0.39–0.62 in 4/4 runs; width 4: 0.17–0.26 — much better, but not near zero like the other cases' },
+      { title: 'Sphere → ellipsoid', task: 'morph', morph: 'sphere>ellipsoid', layers: 4, lr: 0.01, seed: 1,
+        goal: 'Stretch and tilt a sphere into an ellipsoid.',
+        atD: 'Works: same shape topologically — only bending and stretching.',
+        plus: 'Works too (control experiment).',
+        d: 'works', d1: 'works', measured: 'width 3: worst ≤ 0.02 (4 of 4) · width 4: ≤ 0.01' },
+      { title: 'Unlink the rings', task: 'anchors', dataset: 'shape:linkedRings', layers: 8, lr: 0.003, seed: 1,
+        goal: 'Send one of two linked rings to (1, 0, 0) and the other to (−1, 0, 0).',
+        atD: 'Fails: linked rings stay linked under any bending of 3D space. (It can look solved on the training points — the curve between two of them gets stretched around the other ring; the worst-point check catches it.)',
+        plus: 'Possible: in 4D one ring can slip past the other. Training finds it only sometimes — this experiment uses a seed where it does.',
+        d: 'fails', d1: 'sometimes', measured: 'width 3: worst ≈ 2 (0 of 4) · width 4: solved in 2 of 8 runs' },
+      { title: 'Ball out of the shell', task: 'anchors', dataset: 'shape:nestedSpheres', layers: 6, lr: 0.003, seed: 1,
+        goal: 'Send the inner ball to (1, 0, 0) and the shell around it to (−1, 0, 0).',
+        atD: 'Fails: the 3D version of the disk in the ring — the ball cannot get through the closed shell.',
+        plus: 'Works: in 4D the ball passes around the shell.',
+        d: 'fails', d1: 'works', measured: 'width 3: worst 1.9–2.1 (0 of 4) · width 4: ≤ 0.07 (4 of 4)' },
+      { title: 'Unknot → trefoil', task: 'morph', morph: 'unknot>trefoil', layers: 4, lr: 0.01, seed: 3,
+        goal: 'Tie a plain ring into a trefoil knot.',
+        atD: 'Fails: bending 3D space can never tie or untie a knot — the curve gets stuck at the crossings.',
+        plus: 'Works: in 4D every knot can be tied and untied.',
+        d: 'fails', d1: 'works', measured: 'width 3: worst 0.37–0.51 (0 of 4) · width 4: ≤ 0.04 (3 of 4 runs; this seed works)' },
+      { title: 'Torus → sphere', task: 'morph', morph: 'torus>torusOnSphere', layers: 4, lr: 0.01, seed: 1,
+        goal: 'Close the hole of a torus (donut) so it becomes a sphere.',
+        atD: 'Fails: the hole can only close by folding the tube onto itself everywhere (gluing).',
+        plus: 'Partly: the extra dimension lets it fold, and the error drops a lot, but it never gets close to zero here.',
+        d: 'fails', d1: 'partly', measured: 'width 3: worst 0.39–0.62 · width 4: 0.17–0.26' },
     ],
   };
-  let currentExp = null;
+  const OUTCOME = {
+    works: { icon: '✓', cls: 'ok', word: 'works' },
+    fails: { icon: '✗', cls: 'no', word: 'fails' },
+    sometimes: { icon: '◐', cls: 'mid', word: 'sometimes' },
+    partly: { icon: '◐', cls: 'mid', word: 'partly' },
+  };
+  let currentExp = null, expRun = null;      // expRun = { exp, plus }: the run the result line refers to
 
+  /** Table of experiments: what happens at width d and with one more dimension. */
   function renderExperiments() {
-    const box = $('expList');
-    box.innerHTML = '';
-    for (const e of EXPERIMENTS[S.dim]) {
-      const b = document.createElement('button');
-      b.textContent = (e.verdict === 'possible' ? '✓ ' : '⨯ ') + e.title;
-      b.dataset.tip = e.text;
-      b.className = currentExp === e ? 'on' : '';
-      b.onclick = () => { currentExp = e; showExperiment(); };
-      box.appendChild(b);
+    const d = S.dim, cell = (o) => `<td class="oc ${OUTCOME[o].cls}">${OUTCOME[o].icon} ${OUTCOME[o].word}</td>`;
+    if (currentExp && !EXPERIMENTS[d].includes(currentExp)) currentExp = null;
+    $('expTable').innerHTML = `<tr><th>Experiment (${d}D)</th><th>width ${d}</th><th>+1 dim (${d + 1})</th></tr>`
+      + EXPERIMENTS[d].map((e, i) => `<tr data-i="${i}" class="${currentExp === e ? 'sel' : ''}"><td>${e.title}</td>${cell(e.d)}${cell(e.d1)}</tr>`).join('');
+    for (const tr of $('expTable').querySelectorAll('tr[data-i]')) {
+      tr.onclick = () => { currentExp = EXPERIMENTS[d][+tr.dataset.i]; renderExperiments(); };
     }
-    if (currentExp && !EXPERIMENTS[S.dim].includes(currentExp)) currentExp = null;
     showExperiment();
   }
 
   function showExperiment() {
     const e = currentExp;
     $('expCard').classList.toggle('hidden', !e);
-    for (const b of $('expList').children) b.classList.toggle('on', !!e && b.textContent.endsWith(e.title));
     if (!e) return;
-    const d = S.dim;
-    $('expText').innerHTML = `<b>${e.title}</b> — ${e.text}<br><span class="tag">Measured: ${e.measured}.</span>`;
-    $('expRun').textContent = `Run at width ${d}`;
-    $('expPlus').textContent = `+1 dimension (width ${d + 1})`;
+    const d = S.dim, expect = (o) => (o === 'works' ? 'expected: works' : o === 'fails' ? 'expected: fails' : `expected: ${o}`);
+    $('expText').innerHTML = `<div class="exp-title">${e.title}</div>
+      <div class="exp-row"><span>Goal</span><span>${e.goal}</span></div>
+      <div class="exp-row"><span>Width ${d}</span><span class="${OUTCOME[e.d].cls}">${OUTCOME[e.d].icon}</span><span>${e.atD}</span></div>
+      <div class="exp-row"><span>Width ${d + 1}</span><span class="${OUTCOME[e.d1].cls}">${OUTCOME[e.d1].icon}</span><span>${e.plus}</span></div>
+      <div class="exp-row"><span>Watch</span><span>“worst point off by” under Training: near 0 = solved; around 2 = some point landed at the wrong target.</span></div>
+      <div class="tag">Measured: ${e.measured}.</div>`;
+    $('expRun').textContent = `▶ Width ${d} — ${expect(e.d)}`;
+    $('expPlus').textContent = `▶ Width ${d + 1} — ${expect(e.d1)}`;
+    renderExpResult();
+  }
+
+  /** Live verdict for the experiment that is (or was last) trained. */
+  function renderExpResult() {
+    const el = $('expResult');
+    if (!el) return;
+    if (!expRun || expRun.exp !== currentExp || !trainer || !trainer.step_) { el.textContent = ''; el.className = 'exp-result'; return; }
+    const w = worstDense(), d = S.dim + expRun.plus;
+    if (w === null || w === undefined) return;
+    const solved = w < 0.3;
+    el.className = 'exp-result ' + (solved ? 'ok' : 'no');
+    el.textContent = `Your run (width ${d}, ${trainer.step_} steps): worst point off by ${w.toFixed(2)} → ${solved ? '✓ solved' : training ? '✗ not solved yet' : '✗ not solved'}`;
   }
 
   /** Configure everything for the experiment and start training. plus = 1 adds a hidden dimension. */
@@ -1396,6 +1441,7 @@
     t = 1e9;
     fitView();
     training = true;
+    expRun = { exp: e, plus };
     updateTrainStatus();
     flashHint(`${e.title}: ${e.layers} layers, width ${d + plus}${plus ? ' (one extra dimension)' : ''}, tanh, invertible layers, seed ${e.seed} — training…`);
   }

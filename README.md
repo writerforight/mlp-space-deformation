@@ -22,9 +22,10 @@ only to draw the 3D view.
 2. **Send each class to a point.** Training → Task *send each class to a point*, Data *spirals*, press
    **★ Recommended**, then **▶ Train**. Blue points are pulled to (1, 0), red points to (−1, 0); at the
    output the whole plane collapses onto the segment between them.
-3. **Topology experiments: what a network can and cannot do.** Pick one in the *Topology experiments*
-   panel (e.g. 3D → *Unlink the rings*) and press **Run at width d**: the network is a homeomorphism and
-   fails. Then press **+1 dimension**: with one extra dimension it succeeds. Watch "worst point off by" —
+3. **Topology experiments: what a network can and cannot do.** The *Topology experiments* table shows for
+   every experiment whether it works at width *d* and with one extra dimension. Click one (e.g. 3D →
+   *Ball out of the shell*), run **Width 3 — expected: fails**, then **Width 4 — expected: works**; the
+   result line under the buttons says whether your run solved it. Watch "worst point off by" —
    it is measured on a 50× finer copy of the shape, because the network otherwise cheats by stretching
    the piece of a curve between two training points around the obstacle.
 4. **Catastrophic forgetting.** Task *pinned points*, drag a few pins, Mode *sequential*, train with
