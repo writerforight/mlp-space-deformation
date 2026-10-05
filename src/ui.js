@@ -17,6 +17,11 @@
   const BASIS_COLORS = ['#ff6b6b', '#51cf66', '#4dabf7'];
   const GRID_COLOR = 'rgba(150,160,180,0.35)';
   const STATE_VERSION = 1;
+  // shape pairs for the "turn one shape into another" task, per dimension
+  const MORPHS = {
+    2: [['circle', 'square'], ['circle', 'star'], ['circle', 'figure8'], ['twoCircles', 'oneCircleTwice']],
+    3: [['sphere', 'ellipsoid'], ['sphere', 'cube'], ['unknot', 'trefoil'], ['torus', 'torusOnSphere']],
+  };
 
   // ===========================================================================
   // State
@@ -26,12 +31,12 @@
     return {
       version: STATE_VERSION,
       dim,
-      net: { layers: 3, width: dim, defaultAct: 'tanh', temperature: 0, outputLinear: false,
+      net: { layers: 3, width: dim, defaultAct: 'tanh', temperature: 0, outputLinear: false, homeo: false,
         overrides: [], init: { dist: 'he', scale: 1.6, seed: 2 } },
       objects: [],
       nPoints: 300,
       display: { grid: true, circle: true, basis: true, origin: true, jac: false, det: false, dist: false, autoFit: false },
-      train: { target: 'none', dataset: 'moons', transform: 'rotation', amount: 0.9, optimizer: 'adam', lr: 0.01, batch: 32, stepsPerFrame: 5,
+      train: { target: 'none', dataset: 'moons', transform: 'rotation', morph: MORPHS[dim][0].join('>'), amount: 0.9, optimizer: 'adam', lr: 0.01, batch: 32, stepsPerFrame: 5,
         redrawEvery: 10, mode: 'joint', stepsPerTask: 300, nTasks: 3, method: 'none', lambda: 100 },
       pins: [],
       custom: [],          // painted points for the "paint your own" dataset: [{ x, label }]
@@ -94,6 +99,7 @@
     netVersion++;
     renderLayerActs();
     if ($('targetNote')) $('targetNote').textContent = targetNote() + outputWarning();
+    if ($('netNote')) renderNetNote();
     invalidate();
   }
 
@@ -111,7 +117,10 @@
   const isClassify = () => S.train.target === 'classify';
   const isAnchors = () => S.train.target === 'anchors';
   const isTransform = () => S.train.target === 'transform';
+  const isMorph = () => S.train.target === 'morph';
   const usesClasses = () => isClassify() || isAnchors();
+  const HOMEO_FLOOR = 0.2;                  // smallest singular value kept in homeomorphism mode
+  const morphPair = () => S.train.morph.split('>');
 
   /** Target point of a class for the "anchors" task: blue → +e1, red → −e1. */
   function anchor(c) {
@@ -132,16 +141,52 @@
     return ok / data.length;
   }
 
+  /** Largest distance between an output and its target over a set of samples (vector targets only). */
+  function worstOn(set) {
+    if (!set || !set.length || isClassify() || !set[0].y || typeof set[0].y === 'number') return null;
+    let w = 0;
+    for (const s of set) { const o = net.predict(s.x); let d = 0; for (let k = 0; k < o.length; k++) d += (o[k] - s.y[k]) ** 2; w = Math.max(w, d); }
+    return Math.sqrt(w);
+  }
+
+  /*
+   * Shape tasks are also checked on a 50× finer copy of the shape: the network only sees 400 training
+   * points and can pass a curve *between* two of them (a tear the training points never see).
+   */
+  let denseCache = null, worstCache = { at: 0, version: -1, value: null };
+  function denseData() {
+    const key = `${S.dim}|${S.train.target}|${S.train.dataset}|${S.train.morph}`;
+    if (denseCache && denseCache.key === key) return denseCache.data;
+    let d = null;
+    if (isMorph()) { const [a, b] = morphPair(); d = NN.morphData(a, b, 20000); }
+    else if (isAnchors() && S.train.dataset.startsWith('shape:')) {
+      d = NN.makeShape(S.train.dataset.slice(6), 20000).components.flatMap((c) => c.pts.map((x) => ({ x, y: anchor(c.label) })));
+    }
+    denseCache = { key, data: d };
+    return d;
+  }
+  function worstDense() {
+    const now = performance.now();
+    if (worstCache.version === netVersion + trainer.step_ || now - worstCache.at < 400) return worstCache.value;
+    worstCache = { at: now, version: netVersion + trainer.step_, value: worstOn(denseData()) };
+    return worstCache.value;
+  }
+
   function buildData() {
     const rng = new NN.Rng(S.net.init.seed * 101 + 5);
     targetA = null;
     if (usesClasses()) {
-      const raw = S.train.dataset === 'custom' ? S.custom.map((p) => ({ x: Float64Array.from(p.x), y: p.label }))
-        : NN.makeDataset(S.train.dataset, 400, S.dim, rng);
+      const ds = S.train.dataset;
+      const raw = ds === 'custom' ? S.custom.map((p) => ({ x: Float64Array.from(p.x), y: p.label }))
+        : ds.startsWith('shape:') ? NN.makeShape(ds.slice(6)).components.flatMap((c) => c.pts.map((x) => ({ x, y: c.label })))
+        : NN.makeDataset(ds, 400, S.dim, rng);
       data = raw.map((s) => ({ x: s.x, label: s.y, y: isAnchors() ? anchor(s.y) : s.y }));
     } else if (isTransform()) {
       targetA = NN.targetMatrix(S.train.transform, S.dim, S.train.amount);
       data = NN.makeTransformData(targetA, 300, S.dim, rng);
+    } else if (isMorph()) {
+      const [from, to] = morphPair();
+      data = NN.morphData(from, to);
     } else data = [];
   }
 
@@ -162,7 +207,8 @@
   function trainerOpts() {
     const T = S.train;
     return { type: isClassify() ? 'ce' : 'mse', optimizer: T.optimizer, lr: T.lr, batch: T.batch, mode: T.mode,
-      stepsPerTask: T.stepsPerTask, method: T.method, ewcLambda: T.lambda, seed: S.net.init.seed };
+      stepsPerTask: T.stepsPerTask, method: T.method, ewcLambda: T.lambda, seed: S.net.init.seed,
+      invertibleFloor: S.net.homeo ? HOMEO_FLOOR : 0 };
   }
 
   function rebuildTrainer() {
@@ -226,7 +272,7 @@
     for (const o of S.objects) {
       // Fibonacci spheres are one long spiral: draw it lighter so the surface stays readable
       out.push({ id: `o${o.id}`, role: 'object', kind: 'line', closed: o.closed, color: o.color, width: 2,
-        alpha: o.type === 'sphere' ? 0.6 : 1, pts: o.points.map((p) => Float64Array.from(p)) });
+        alpha: o.type === 'sphere' || o.surface ? 0.6 : 1, pts: o.points.map((p) => Float64Array.from(p)) });
       if (o.interior && o.interior.length) {
         out.push({ id: `oi${o.id}`, role: 'objectFill', kind: 'points', color: o.color, size: 1.6, alpha: 0.75, pts: o.interior.map((p) => Float64Array.from(p)) });
       }
@@ -256,8 +302,15 @@
 
   function allDrawables() {
     const ds = referenceDrawables().concat(userDrawables());
-    if (usesClasses() && data.length) {
+    if (usesClasses() && S.train.dataset.startsWith('shape:')) {     // exact shapes: dense curves show every tear
+      NN.makeShape(S.train.dataset.slice(6), 4000).components.forEach((c, k) => ds.push({ id: `shape${k}`, role: 'data',
+        kind: c.closed ? 'line' : 'points', closed: c.closed, color: CLASS_COLORS[c.label], width: 2, size: 1.4, pts: c.pts }));
+    } else if (usesClasses() && data.length) {
       ds.push({ id: 'data', role: 'data', kind: 'points', size: 2.4, colors: data.map((s) => CLASS_COLORS[s.label]), pts: data.map((s) => s.x) });
+    }
+    if (isMorph()) {
+      NN.makeShape(morphPair()[0], 3000).components.forEach((c, k) => ds.push({ id: `msrc${k}`, role: 'object', kind: c.filled || !c.closed ? 'points' : 'line',
+        closed: c.closed, color: c.label === undefined ? PALETTE[0] : CLASS_COLORS[c.label], width: 2, size: 1.8, pts: c.pts }));
     }
     if (S.pins.length) ds.push({ id: 'pins', role: 'pins', kind: 'points', pts: S.pins.map((p) => Float64Array.from(p.x)) });
     ds.push({ id: 'probe', role: 'probe', kind: 'points', pts: [Float64Array.from(S.probe)] });
@@ -445,6 +498,10 @@
         d.pts.forEach((x, i) => NN.matVec(targetA, x).forEach((v, a) => { g[i * vd + a] = v; }));
         items.push({ id: `${d.id}_target`, kind: 'line', pts: g, closed: d.closed, color: d.color || '#e6edf3', alpha: 0.35, dash: [5, 5], width: 1.5, noFit: true });
       }
+    }
+    if (atOutput && isMorph()) {
+      NN.makeShape(morphPair()[1], 3000).components.forEach((c, k) => items.push({ id: `mtgt${k}`, kind: c.filled || !c.closed ? 'points' : 'line',
+        pts: Float64Array.from(c.pts.flatMap((p) => Array.from(p))), closed: c.closed, color: '#e6edf3', alpha: 0.4, dash: [5, 5], width: 1.5, size: 1.2, noFit: true }));
     }
     // the decision boundary (equal logits) lives on the diagonal of the output plane
     if (atOutput && isClassify() && vd === 2) {
@@ -912,6 +969,13 @@
     if (T.lossHistory.length) parts.push(`loss ${fmt(T.lossHistory[T.lossHistory.length - 1])}`);
     const acc = accuracy();
     if (acc !== null && T.step_ > 0) parts.push(`accuracy ${(100 * acc).toFixed(1)}% (${isAnchors() ? 'nearest target point' : 'larger logit'})`);
+    if (T.step_ > 0 && (isAnchors() || isMorph())) {
+      const wt = worstOn(data), wd = denseData() ? worstDense() : null;
+      if (wd !== null && wd !== undefined) {
+        parts.push(`worst point off by ${wd.toFixed(2)} (on a 50× finer copy of the shape; ${wt.toFixed(2)} on the training points)`);
+        if (wd > 3 * wt + 0.2) parts.push('⚠ the training points look fine, but the curve between two of them is stretched far away — only the finer check sees it');
+      } else if (wt !== null) parts.push(`worst point off by ${wt.toFixed(2)}`);
+    }
     if (S.train.mode === 'sequential' && T.tasks.length) parts.push(T.done ? 'all tasks done' : `task ${T.task + 1}/${T.tasks.length}`);
     if (T.diverged) parts.push('diverged — lower the learning rate and press Reset');
     if (!T.tasks.length) parts.push(S.train.target === 'pins' ? 'add pins with the Pin tool' : 'choose a target');
@@ -925,6 +989,7 @@
       case 'anchors': return `Every blue point should land on (1, 0${z}) and every red point on (−1, 0${z}). Loss: squared distance to its point. Watch each class shrink onto its point.`;
       case 'classify': return 'Two output numbers (logits): blue points should end up on one side of the line logit₁ = logit₂, red points on the other. Loss: cross-entropy.';
       case 'transform': return 'Every input x should go to A·x, where A is the chosen linear map (drawn dashed at the output).';
+      case 'morph': { const [a, b] = morphPair(); return `Point i of the ${NN.SHAPES[a].label} should land on point i of the ${NN.SHAPES[b].label} (drawn dashed at the output). Watch “worst point off by”: a topological obstruction leaves some points far from their target.`; }
       case 'pins': return 'With the Pin tool, drag from an input point to where its output should go; the network bends space to satisfy every pin.';
       default: return 'No training: the network keeps its random weights. Move the stage slider to see what they do to space.';
     }
@@ -939,6 +1004,9 @@
   }
 
   const DATASET_NOTES = {
+    'shape:diskInRing': 'An exact disk inside a ring (no noise). Sending them to two points needs the disk to leave the ring — impossible for a homeomorphism of the plane.',
+    'shape:linkedRings': 'Two exact linked rings (no noise). No homeomorphism of 3D space unlinks them.',
+    'shape:nestedSpheres': 'An exact ball inside a spherical shell. No homeomorphism of 3D space gets the ball out.',
     blobs: 'Two separate clouds: one straight line already splits them, so the network hardly needs to bend space.',
     moons: 'Two interleaving half-moons: one bend is enough.',
     circles: 'A disk inside a ring: no line separates them, and no smooth invertible bending of the plane can move the disk out of the ring — the network has to squash space or lift the disk into an extra dimension (width ≥ 3).',
@@ -956,7 +1024,9 @@
     const sel = $('dataset');
     sel.querySelector('option[value="linked"]').hidden = S.dim !== 3;
     sel.querySelector('option[value="custom"]').hidden = S.dim !== 2;
-    if ((S.train.dataset === 'linked' && S.dim !== 3) || (S.train.dataset === 'custom' && S.dim !== 2)) {
+    for (const o of sel.querySelectorAll('option[value^="shape:"]')) o.hidden = NN.SHAPES[o.value.slice(6)].dim !== S.dim;
+    const dsBad = (S.train.dataset.startsWith('shape:') && NN.SHAPES[S.train.dataset.slice(6)].dim !== S.dim);
+    if (dsBad || (S.train.dataset === 'linked' && S.dim !== 3) || (S.train.dataset === 'custom' && S.dim !== 2)) {
       S.train.dataset = 'moons'; sel.value = 'moons';
     }
     const custom = usesClasses() && S.train.dataset === 'custom';
@@ -966,6 +1036,12 @@
     $('customCount').textContent = `${S.custom.filter((p) => p.label === 0).length} blue · ${S.custom.filter((p) => p.label === 1).length} red`;
     $('clearCustom').disabled = !S.custom.length;
     $('datasetRow').classList.toggle('hidden', !usesClasses());
+    // morph pairs of the current dimension
+    const mp = $('morphPair'), pairs = MORPHS[S.dim];
+    if (!pairs.some((p) => p.join('>') === S.train.morph)) S.train.morph = pairs[0].join('>');
+    mp.innerHTML = pairs.map((p) => `<option value="${p.join('>')}">${NN.SHAPES[p[0]].label} → ${NN.SHAPES[p[1]].label}</option>`).join('');
+    mp.value = S.train.morph;
+    $('morphRow').classList.toggle('hidden', !isMorph());
     $('transformRow').classList.toggle('hidden', !isTransform());
     $('amountRow').classList.toggle('hidden', !isTransform());
     $('targetNote').textContent = targetNote() + outputWarning();
@@ -1131,6 +1207,16 @@
     $('target').onchange = (e) => { S.train.target = e.target.value; training = false; onTargetChange(); };
     $('dataset').onchange = (e) => { S.train.dataset = e.target.value; training = false; rebuildTrainer(); syncTargetUI(); renderToolbar(); invalidate(); };
     $('clearCustom').onclick = () => { training = false; S.custom = []; rebuildTrainer(); syncTargetUI(); invalidate(); };
+    $('morphPair').onchange = (e) => { S.train.morph = e.target.value; training = false; rebuildTrainer(); syncTargetUI(); invalidate(); };
+    $('homeo').onchange = (e) => {
+      S.net.homeo = e.target.checked;
+      if (S.net.homeo) NN.clampSingularValues(net, HOMEO_FLOOR);   // make the current weights invertible right away
+      trainer.setOpts({ invertibleFloor: S.net.homeo ? HOMEO_FLOOR : 0 });
+      netVersion++; renderNetNote(); invalidate();
+    };
+    $('addShape').onclick = addShape;
+    $('expRun').onclick = () => runExperiment(0);
+    $('expPlus').onclick = () => runExperiment(1);
     $('transform').onchange = (e) => { S.train.transform = e.target.value; training = false; rebuildTrainer(); invalidate(); };
     $('optimizer').onchange = (e) => { S.train.optimizer = e.target.value; trainer.setOpts({ optimizer: e.target.value }); };
     $('method').onchange = (e) => { S.train.method = e.target.value; trainer.setOpts({ method: e.target.value }); syncModeUI(); };
@@ -1181,13 +1267,14 @@
     let arch;
     if (T.target === 'anchors' || T.target === 'classify') {
       arch = { blobs: [2, d], moons: [4, d], circles: [4, d === 3 ? 6 : 4], rings: [5, 6], xor: [3, 4], wave: [4, 6],
-        spirals: [6, 6], checker: [6, 8], linked: [4, 4], custom: [5, 6] }[T.dataset] || [4, 6];
+        spirals: [6, 6], checker: [6, 8], linked: [4, 4], custom: [5, 6] }[T.dataset] || (T.dataset.startsWith('shape:') ? [4, d + 1] : [4, 6]);
     } else if (T.target === 'transform') arch = [2, 4];
+    else if (T.target === 'morph') arch = [4, d + 1];
     else if (T.target === 'pins') arch = [3, 6];
     else arch = [3, d];
     const training = T.target !== 'none';
     Object.assign(S.net, { layers: arch[0], width: arch[1], defaultAct: 'tanh', temperature: 0, overrides: [],
-      outputLinear: training, init: { ...S.net.init, dist: training ? 'xavier' : 'he', scale: training ? 1 : 1.6 } });
+      outputLinear: training, homeo: false, init: { ...S.net.init, dist: training ? 'xavier' : 'he', scale: training ? 1 : 1.6 } });
     Object.assign(T, { optimizer: 'adam', lr: 0.01, batch: 32, stepsPerFrame: 10, redrawEvery: 10 });
     training_stop();
     rebuildNet();
@@ -1196,6 +1283,135 @@
     flashHint(`★ Recommended: ${arch[0]} layers, width ${arch[1]}, tanh${training ? ', linear output, Xavier init' : ', He init ×1.6'}, Adam lr 0.01 — view fitted.`);
   }
   function training_stop() { training = false; updateTrainStatus(); }
+
+  // ===========================================================================
+  // Shapes and topology experiments
+  // ===========================================================================
+
+  // shape pairs offered by the "turn one shape into another" task
+  const SHAPE_HIDDEN = new Set(['oneCircleTwice', 'torusOnSphere']);   // only used as morph targets
+
+  function renderShapeSel() {
+    $('shapeSel').innerHTML = Object.entries(NN.SHAPES).filter(([k, v]) => v.dim === S.dim && !SHAPE_HIDDEN.has(k))
+      .map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('');
+  }
+
+  /** Add a ready-made shape as objects (one object per component). */
+  function addShape() {
+    const sh = NN.makeShape($('shapeSel').value, S.nPoints);
+    for (const c of sh.components) {
+      const color = c.label === undefined ? undefined : CLASS_COLORS[c.label];
+      const surface = S.dim === 3 && !c.closed;
+      if (c.filled) {                                   // filled disk: boundary circle + interior points
+        const r = Math.max(...c.pts.map((p) => Math.hypot(...p)));
+        addObject({ type: `${sh.label} (filled)`, closed: true, color, interior: c.pts.map((p) => Array.from(p)),
+          points: linspace(0, 2 * Math.PI, 121).slice(0, 120).map((a) => [r * Math.cos(a), r * Math.sin(a)]) });
+      } else addObject({ type: sh.label, closed: c.closed, surface, color, points: c.pts.map((p) => Array.from(p)) });
+    }
+  }
+
+  /*
+   * Each experiment pushes the network to the limit of what a homeomorphism can do: width = dimension,
+   * invertible layers (homeomorphism mode), tanh.  "+1 dimension" repeats it with width d + 1.
+   * The measured numbers come from test/topology_experiments.js (4 layers, 6000 Adam steps).
+   */
+  const EXPERIMENTS = {
+    2: [
+      { title: 'Circle → square', task: 'morph', morph: 'circle>square', verdict: 'possible', layers: 4, lr: 0.01, seed: 1,
+        text: 'Control: a circle and a square are homeomorphic, so a width-2 invertible network can do it.',
+        measured: 'width 2: worst point 0.10–0.14 in 4/4 runs' },
+      { title: 'Disk out of the ring', task: 'anchors', dataset: 'shape:diskInRing', verdict: 'impossible', layers: 4, lr: 0.01, seed: 1,
+        text: 'Send the disk to (1, 0) and the ring to (−1, 0). A homeomorphism of the plane cannot move the disk across the ring, so some point always ends up at the wrong target.',
+        measured: 'width 2: worst point 1.5–2.1 in 4/4 runs; width 3: ≤ 0.25 in 4/4' },
+      { title: 'Two circles → one', task: 'morph', morph: 'twoCircles>oneCircleTwice', verdict: 'impossible', layers: 4, lr: 0.01, seed: 1,
+        text: 'Merge two separate circles into one: that glues points together, which an invertible map cannot do.',
+        measured: 'width 2: worst point 1.1–1.7 in 4/4 runs; width 3: ≤ 0.02 in 4/4 (the final layer back to 2D can glue)' },
+      { title: 'Circle → figure eight', task: 'morph', morph: 'circle>figure8', verdict: 'impossible', layers: 4, lr: 0.01, seed: 1,
+        text: 'The figure eight crosses itself: two points of the circle must land on the same point.',
+        measured: 'width 2: worst point 0.47–0.65 in 4/4 runs; width 3: ≤ 0.02 in 4/4' },
+    ],
+    3: [
+      { title: 'Sphere → ellipsoid', task: 'morph', morph: 'sphere>ellipsoid', verdict: 'possible', layers: 4, lr: 0.01, seed: 1,
+        text: 'Control: a stretched, tilted sphere is homeomorphic to the sphere.',
+        measured: 'width 3: worst point ≤ 0.02 in 4/4 runs' },
+      { title: 'Unlink the rings', task: 'anchors', dataset: 'shape:linkedRings', verdict: 'impossible', layers: 8, lr: 0.003, seed: 1,
+        text: 'Send one ring to (1, 0, 0) and the other to (−1, 0, 0). No homeomorphism of 3D space unlinks two linked rings; in 4D one ring can pass the other. A long run at width 3 can still “solve” the 400 training points by stretching the piece of a ring between two of them around the other ring — the finer check catches it.',
+        measured: 'width 3: worst point ≈ 2 in 4/4 runs; width 4: solved in 2 of 8 runs (this seed is one of them) — possible, but hard to find' },
+      { title: 'Ball out of the shell', task: 'anchors', dataset: 'shape:nestedSpheres', verdict: 'impossible', layers: 6, lr: 0.003, seed: 1,
+        text: 'Separate a ball from the shell around it — the 3D version of the disk in the ring.',
+        measured: 'width 3: worst point 1.9–2.1 in 4/4 runs; width 4: ≤ 0.07 in 4/4' },
+      { title: 'Unknot → trefoil', task: 'morph', morph: 'unknot>trefoil', verdict: 'impossible', layers: 4, lr: 0.01, seed: 3,
+        text: 'A plain ring and a trefoil knot are the same curve on their own, but no homeomorphism of 3D space ties a knot. In 4D every knot can be undone.',
+        measured: 'width 3: worst point 0.37–0.51 (stuck at the crossings) in 4/4 runs; width 4: ≤ 0.04 in 3 of 4 runs (this seed is one of them)' },
+      { title: 'Torus → sphere', task: 'morph', morph: 'torus>torusOnSphere', verdict: 'impossible', layers: 4, lr: 0.01, seed: 1,
+        text: 'Closing the hole of a torus means folding the whole tube onto itself (two points onto one, everywhere). A homeomorphism cannot; with an extra dimension the final layer back to 3D can glue, but this fold is much harder to learn than the others.',
+        measured: 'width 3: worst point 0.39–0.62 in 4/4 runs; width 4: 0.17–0.26 — much better, but not near zero like the other cases' },
+    ],
+  };
+  let currentExp = null;
+
+  function renderExperiments() {
+    const box = $('expList');
+    box.innerHTML = '';
+    for (const e of EXPERIMENTS[S.dim]) {
+      const b = document.createElement('button');
+      b.textContent = (e.verdict === 'possible' ? '✓ ' : '⨯ ') + e.title;
+      b.dataset.tip = e.text;
+      b.className = currentExp === e ? 'on' : '';
+      b.onclick = () => { currentExp = e; showExperiment(); };
+      box.appendChild(b);
+    }
+    if (currentExp && !EXPERIMENTS[S.dim].includes(currentExp)) currentExp = null;
+    showExperiment();
+  }
+
+  function showExperiment() {
+    const e = currentExp;
+    $('expCard').classList.toggle('hidden', !e);
+    for (const b of $('expList').children) b.classList.toggle('on', !!e && b.textContent.endsWith(e.title));
+    if (!e) return;
+    const d = S.dim;
+    $('expText').innerHTML = `<b>${e.title}</b> — ${e.text}<br><span class="tag">Measured: ${e.measured}.</span>`;
+    $('expRun').textContent = `Run at width ${d}`;
+    $('expPlus').textContent = `+1 dimension (width ${d + 1})`;
+  }
+
+  /** Configure everything for the experiment and start training. plus = 1 adds a hidden dimension. */
+  function runExperiment(plus) {
+    const e = currentExp;
+    if (!e) return;
+    const d = S.dim;
+    Object.assign(S.train, { target: e.task, mode: 'joint', optimizer: 'adam', lr: e.lr, batch: 64, stepsPerFrame: 20, redrawEvery: 20 });
+    if (e.morph) S.train.morph = e.morph;
+    if (e.dataset) S.train.dataset = e.dataset;
+    Object.assign(S.net, { layers: e.layers, width: d + plus, defaultAct: 'tanh', temperature: 0, overrides: [], outputLinear: true,
+      homeo: true, init: { dist: 'xavier', scale: 1, seed: e.seed } });
+    training = false;
+    rebuildNet();
+    // invertible matrices come in two pieces (det > 0, det < 0) and homeomorphism-mode training cannot
+    // cross between them, so start orientation-preserving like the targets
+    NN.orientPositive(net);
+    NN.clampSingularValues(net, HOMEO_FLOOR);
+    syncControls();
+    t = 1e9;
+    fitView();
+    training = true;
+    updateTrainStatus();
+    flashHint(`${e.title}: ${e.layers} layers, width ${d + plus}${plus ? ' (one extra dimension)' : ''}, tanh, invertible layers, seed ${e.seed} — training…`);
+  }
+
+  /** Under the network settings: what homeomorphism mode guarantees with the current activations. */
+  function renderNetNote() {
+    const el = $('netNote');
+    if (!el || !net) return;
+    if (!S.net.homeo) { el.textContent = ''; return; }
+    const bad = [...new Set(net.acts.filter((a) => !NN.ACTIVATIONS[a].injective))];
+    const wide = S.net.width !== S.dim;
+    el.textContent = bad.length
+      ? `⚠ ${bad.join(', ')} ${bad.length > 1 ? 'are' : 'is'} not injective, so the network can still fold space even with invertible weights. Use tanh, sigmoid or identity.`
+      : wide ? `Square layers are kept invertible. With width ${S.net.width} ≠ ${S.dim} the first and last layers change dimension, so the whole network is no longer a homeomorphism of the ${S.dim}D space.`
+        : 'Every layer is invertible: the network is a homeomorphism — it can bend and stretch space but cannot tear or glue it.';
+  }
 
   /** After a finished sequential run, "Train" starts a new run on the current weights. */
   function rebuildTrainerKeepWeights() {
@@ -1218,6 +1434,10 @@
     for (const s of syncers) s();
     $('defaultAct').value = S.net.defaultAct;
     $('outputLinear').checked = S.net.outputLinear;
+    $('homeo').checked = !!S.net.homeo;
+    renderShapeSel();
+    renderExperiments();
+    renderNetNote();
     $('initDist').value = S.net.init.dist;
     $('seed').value = S.net.init.seed;
     for (const k of ['grid', 'circle', 'basis', 'origin', 'jac', 'det', 'dist', 'autoFit']) {

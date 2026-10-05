@@ -152,6 +152,26 @@ for (const act of NN.ACTIVATION_NAMES) {
   check('all datasets generated', true);
 }
 
+// 5c) square SVD and homeomorphism mode
+{
+  const M = [[2, 1, 0], [0, 1e-4, 0], [1, 0, 3]];
+  const { U, s, V } = NN.squareSvd(M);
+  let err = 0;
+  for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) { let v = 0; for (let k = 0; k < 3; k++) v += U[k][i] * s[k] * V[k][j]; err = Math.max(err, Math.abs(v - M[i][j])); }
+  check('square SVD reconstructs the matrix', err < 1e-10, `err ${err.toExponential(1)}`);
+  const net = new NN.MLP([2, 2, 2, 2], ['tanh', 'tanh', 'identity']).init('normal', 1, new NN.Rng(3));
+  net.theta.set([1, 2, 2, 4], net.layout[0].w);                   // a singular first layer
+  NN.clampSingularValues(net, 0.2);
+  const ok = [0, 1, 2].every((l) => NN.singularValues(net.weightMatrix(l)).every((v) => v >= 0.2 - 1e-9));
+  check('homeomorphism mode keeps every square layer invertible', ok);
+  const tr = new NN.Trainer(net, { type: 'mse', lr: 0.05, batch: 32, invertibleFloor: 0.2 });
+  tr.setTasks([NN.morphData('circle', 'figure8')]);
+  for (let i = 0; i < 300; i++) tr.step();
+  check('…and stays so during training', [0, 1, 2].every((l) => NN.singularValues(net.weightMatrix(l)).every((v) => v >= 0.2 - 1e-9)));
+  const md = NN.morphData('twoCircles', 'oneCircleTwice');
+  check('morph data pairs every source point with a target point', md.length === 400 && md.every((s) => s.x.length === 2 && s.y.length === 2));
+}
+
 // 6) analysis helpers
 {
   const net = new NN.MLP([2, 2, 2], ['relu', 'identity']).init('normal', 1, new NN.Rng(7));

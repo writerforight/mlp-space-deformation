@@ -160,7 +160,9 @@
       <input id="temperature" type="range" min="0" max="1" step="0.05"><span class="val" id="temperatureVal"></span></div>
     <div class="checks" style="grid-template-columns:1fr">
       <label data-tip="Make the last layer linear (identity activation) — usually what you want when training regression or classification outputs."><input id="outputLinear" type="checkbox"> Linear output layer</label>
+      <label data-tip="After every training step, keep each square weight matrix invertible (smallest singular value ≥ 0.2). With width = input dimension and tanh/sigmoid/identity the network is then a homeomorphism: it can bend space but never tear or glue it."><input id="homeo" type="checkbox"> Keep layers invertible (homeomorphism)</label>
     </div>
+    <div class="note" id="netNote"></div>
     <div id="layerActs"></div>
     <div class="row"><label data-tip="Distribution of the random initial weights. Xavier/He scale the spread by the layer sizes.">Init</label>
       <select id="initDist"><option value="normal">normal</option><option value="uniform">uniform</option><option value="xavier">Xavier</option><option value="he">He</option></select></div>
@@ -179,6 +181,8 @@
       <div class="row"><label>Radius</label><input id="sr" type="number" step="0.1" min="0.05" value="0.6">
         <button id="addSphere" data-tip="Add a sphere sampled with the Fibonacci spiral, points connected in spiral order.">Add sphere</button></div>
     </div>
+    <div class="row"><label data-tip="Ready-made shapes for topology experiments; they are added as objects and pushed through the network.">Shape</label>
+      <select id="shapeSel"></select><button id="addShape">Add</button></div>
     <div id="objList"></div>
     <div id="pinList"></div>
     <div class="btns"><button id="clearObjects" data-tip="Remove all drawn objects (curves, circles, regions, spheres). Pins stay.">Clear objects</button>
@@ -206,6 +210,7 @@
         <option value="anchors">send each class to a point</option>
         <option value="classify">separate classes (logits)</option>
         <option value="transform">match a linear map</option>
+        <option value="morph">turn one shape into another</option>
         <option value="pins">pinned points</option>
       </select></div>
     <div class="row" id="datasetRow"><label data-tip="Two-class dataset: blue is class 1, red is class 2.">Data</label>
@@ -213,10 +218,13 @@
         <optgroup label="Easy"><option value="blobs">two blobs (already separable)</option><option value="moons">two moons</option><option value="circles">disk inside a ring</option></optgroup>
         <optgroup label="Harder"><option value="xor">XOR</option><option value="wave">wavy boundary</option><option value="rings">three rings</option></optgroup>
         <optgroup label="Hard"><option value="spirals">spirals</option><option value="checker">checkerboard</option><option value="linked">linked rings (3D)</option></optgroup>
+        <optgroup label="Exact shapes (no noise)"><option value="shape:diskInRing">disk inside a ring (2D)</option><option value="shape:linkedRings">two linked rings (3D)</option><option value="shape:nestedSpheres">ball inside a shell (3D)</option></optgroup>
         <optgroup label="Your own"><option value="custom">paint your own (2D)</option></optgroup>
       </select></div>
     <div class="note" id="datasetNote"></div>
     <div class="btns" id="customRow"><button id="clearCustom" data-tip="Remove all painted points.">Clear painted points</button><span class="tag" id="customCount"></span></div>
+    <div class="row" id="morphRow"><label data-tip="Point i of the first shape should go to point i of the second (same parametrisation).">Shapes</label>
+      <select id="morphPair"></select></div>
     <div class="row" id="transformRow"><label data-tip="The linear map A the network should learn: x ↦ A·x.">Map</label>
       <select id="transform"><option value="rotation">rotation</option><option value="shear">shear</option><option value="scaling">scaling</option></select></div>
     <div class="row" id="amountRow"><label data-tip="Angle (rotation, radians), shear factor, or scale factor of the target transform.">Amount</label>
@@ -247,6 +255,16 @@
       <button id="trainReset" data-tip="Re-initialise the weights (same seed) and clear the training history.">Reset</button>
     </div>
     <div class="note" id="trainStatus"></div>
+
+    <h2>Topology experiments</h2>
+    <div class="note">What can a network do to space? With width = dimension and invertible layers it is a
+      homeomorphism — it bends but never tears or glues. Each experiment runs at that limit; “+1 dimension”
+      gives it one extra dimension to work in.</div>
+    <div id="expList" class="btns"></div>
+    <div id="expCard" class="hidden">
+      <div class="note" id="expText"></div>
+      <div class="btns"><button id="expRun" class="primary">Run at width d</button><button id="expPlus" data-tip="Same experiment with one extra hidden dimension (width d + 1).">+1 dimension</button></div>
+    </div>
   </aside>
 
   <!-- ======================= centre: the view ======================= -->

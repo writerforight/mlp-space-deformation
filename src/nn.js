@@ -552,6 +552,163 @@
   }
 
   // ===========================================================================
+  // Shapes for topology experiments
+  // ===========================================================================
+
+  /*
+   * Every shape is a list of components; a component is an ordered list of points (a closed or open
+   * curve, or a surface drawn as one long spiral) with a class label.  Shapes that are meant to be
+   * morphed into each other use the SAME parameter for the same index i (e.g. the angle t), so point i
+   * of the source corresponds to point i of the target.
+   */
+  const TAU = 2 * Math.PI;
+  const ring = (n, f) => [...Array(n)].map((_, i) => Float64Array.from(f((TAU * i) / n, i)));
+  const toCube = (p, s) => { const m = Math.max(...p.map(Math.abs)) || 1; return p.map((v) => (s * v) / m); };
+
+  const SHAPES = {
+    // ---- 2D
+    circle: { dim: 2, label: 'circle', make: (n) => [{ closed: true, pts: ring(n, (t) => [0.8 * Math.cos(t), 0.8 * Math.sin(t)]) }] },
+    square: { dim: 2, label: 'square', make: (n) => [{ closed: true, pts: ring(n, (t) => toCube([Math.cos(t), Math.sin(t)], 0.8)) }] },
+    star: { dim: 2, label: 'star', make: (n) => [{ closed: true, pts: ring(n, (t) => { const r = 0.62 * (1 + 0.35 * Math.cos(5 * t)); return [r * Math.cos(t), r * Math.sin(t)]; }) }] },
+    // lemniscate of Gerono: the curve passes through the origin twice (t = π/2 and 3π/2)
+    figure8: { dim: 2, label: 'figure eight', make: (n) => [{ closed: true, pts: ring(n, (t) => [0.9 * Math.cos(t), 0.9 * Math.sin(t) * Math.cos(t)]) }] },
+    twoCircles: { dim: 2, label: 'two circles', make: (n) => [-1, 1].map((sx, c) => ({ closed: true, label: c,
+      pts: ring(Math.floor(n / 2), (t) => [0.75 * sx + 0.45 * Math.cos(t), 0.45 * Math.sin(t)]) })) },
+    // two copies of one circle on top of each other: the target of "merge two circles into one"
+    oneCircleTwice: { dim: 2, label: 'one circle (both parts)', make: (n) => [0, 1].map((c) => ({ closed: true, label: c,
+      pts: ring(Math.floor(n / 2), (t) => [0.8 * Math.cos(t), 0.8 * Math.sin(t)]) })) },
+    diskInRing: { dim: 2, label: 'disk inside a ring', make: (n) => {
+      const disk = [], k = Math.floor(n / 2), ga = Math.PI * (3 - Math.sqrt(5));
+      for (let i = 0; i < k; i++) { const r = 0.45 * Math.sqrt((i + 0.5) / k); disk.push(Float64Array.from([r * Math.cos(ga * i), r * Math.sin(ga * i)])); }
+      return [{ closed: false, filled: true, label: 0, pts: disk }, { closed: true, label: 1, pts: ring(n - k, (t) => [1.1 * Math.cos(t), 1.1 * Math.sin(t)]) }];
+    } },
+    // ---- 3D
+    sphere: { dim: 3, label: 'sphere', make: (n) => [{ closed: false, pts: fibonacciSphere(n, [0, 0, 0], 0.8) }] },
+    // a stretched, sheared sphere: the clean 3D control (homeomorphic, smooth, no corners)
+    ellipsoid: { dim: 3, label: 'ellipsoid', make: (n) => [{ closed: false, pts: fibonacciSphere(n, [0, 0, 0], 1).map((p) =>
+      Float64Array.from([1.1 * p[0] + 0.3 * p[1], 0.55 * p[1], 0.75 * p[2] + 0.2 * p[0]])) }] },
+    cube: { dim: 3, label: 'cube surface', make: (n) => [{ closed: false, pts: fibonacciSphere(n, [0, 0, 0], 1).map((p) => Float64Array.from(toCube(Array.from(p), 0.75))) }] },
+    torus: { dim: 3, label: 'torus (donut)', make: (n) => [{ closed: true, pts: torusPts(n) }] },
+    // the torus mapped onto a sphere (longitude = u, latitude from v): what "close the hole" asks for
+    torusOnSphere: { dim: 3, label: 'torus squeezed onto a sphere', make: (n) => [{ closed: true, pts: torusPts(n, true) }] },
+    unknot: { dim: 3, label: 'unknotted ring', make: (n) => [{ closed: true, pts: ring(n, (t) => [0.9 * Math.cos(t), 0.9 * Math.sin(t), 0]) }] },
+    trefoil: { dim: 3, label: 'trefoil knot', make: (n) => [{ closed: true, pts: ring(n, (t) => [
+      0.3 * (Math.sin(t) + 2 * Math.sin(2 * t)), 0.3 * (Math.cos(t) - 2 * Math.cos(2 * t)), -0.3 * Math.sin(3 * t)]) }] },
+    linkedRings: { dim: 3, label: 'two linked rings', make: (n) => [0, 1].map((c) => ({ closed: true, label: c,
+      pts: ring(Math.floor(n / 2), (t) => (c === 0 ? [-0.5 + Math.cos(t), Math.sin(t), 0] : [0.5 - Math.cos(t), 0, Math.sin(t)])) })) },
+    nestedSpheres: { dim: 3, label: 'ball inside a shell', make: (n) => [
+      { closed: false, label: 0, pts: fibonacciSphere(Math.floor(n / 2), [0, 0, 0], 0.4) },
+      { closed: false, label: 1, pts: fibonacciSphere(n - Math.floor(n / 2), [0, 0, 0], 1.1) }] },
+  };
+
+  /** Torus (R = 0.75, r = 0.3) drawn as one spiral that winds 23 times around the tube. */
+  function torusPts(n, ontoSphere = false) {
+    const R = 0.75, r = 0.3, W = 23;
+    return [...Array(n)].map((_, i) => {
+      const u = (TAU * i) / n, v = (TAU * W * i) / n;
+      if (!ontoSphere) return Float64Array.from([(R + r * Math.cos(v)) * Math.cos(u), (R + r * Math.cos(v)) * Math.sin(u), r * Math.sin(v)]);
+      const lat = (Math.PI / 2) * Math.cos(v);           // v and −v land on the same point: the hole is closed
+      return Float64Array.from([0.8 * Math.cos(lat) * Math.cos(u), 0.8 * Math.cos(lat) * Math.sin(u), 0.8 * Math.sin(lat)]);
+    });
+  }
+
+  function makeShape(name, n = 400) {
+    const S = SHAPES[name];
+    return { name, dim: S.dim, label: S.label, components: S.make(n) };
+  }
+
+  /** Training pairs that send point i of shape `from` to point i of shape `to`. */
+  function morphData(from, to, n = 400) {
+    const A = makeShape(from, n).components, B = makeShape(to, n).components;
+    const out = [];
+    A.forEach((ca, k) => ca.pts.forEach((p, i) => out.push({ x: p, y: B[k].pts[i], label: ca.label ?? 0 })));
+    return out;
+  }
+
+  // ===========================================================================
+  // Square-matrix SVD and the "homeomorphism mode" projection
+  // ===========================================================================
+
+  /** SVD of a square matrix M (rows): M = U diag(s) Vᵀ.  Returns { U, s, V } with U, V as arrays of columns. */
+  function squareSvd(M) {
+    const n = M.length;
+    const G = [...Array(n)].map((_, i) => Float64Array.from([...Array(n)].map((_, j) => M.reduce((acc, row) => acc + row[i] * row[j], 0))));
+    const { values, vectors } = symEig(G);
+    const s = values.map((v) => Math.sqrt(Math.max(0, v)));
+    const V = vectors.map((v) => Float64Array.from(v));
+    const U = [];
+    for (let k = 0; k < n; k++) {
+      let u;
+      if (s[k] > 1e-10 * Math.max(1, s[0])) u = Float64Array.from(M.map((row) => dot(row, V[k]) / s[k]));
+      else {                                               // complete the basis (Gram–Schmidt on e_i)
+        for (let e = 0; e < n && !u; e++) {
+          const c = new Float64Array(n); c[e] = 1;
+          for (const b of U) { const d = dot(c, b); for (let i = 0; i < n; i++) c[i] -= d * b[i]; }
+          const nc = norm(c);
+          if (nc > 1e-6) u = c.map((v) => v / nc);
+        }
+      }
+      U.push(u);
+    }
+    return { U, s, V };
+  }
+
+  /** Determinant of a small square matrix (rows), by Gaussian elimination with partial pivoting. */
+  function det(M) {
+    const a = M.map((r) => Float64Array.from(r)), n = a.length;
+    let d = 1;
+    for (let c = 0; c < n; c++) {
+      let p = c;
+      for (let r = c + 1; r < n; r++) if (Math.abs(a[r][c]) > Math.abs(a[p][c])) p = r;
+      if (Math.abs(a[p][c]) < 1e-300) return 0;
+      if (p !== c) { [a[p], a[c]] = [a[c], a[p]]; d = -d; }
+      d *= a[c][c];
+      for (let r = c + 1; r < n; r++) { const f = a[r][c] / a[c][c]; for (let k = c; k < n; k++) a[r][k] -= f * a[c][k]; }
+    }
+    return d;
+  }
+
+  /**
+   * Make every square weight matrix orientation-preserving (det > 0) by flipping the sign of one row
+   * (and its bias) where needed.  Invertible matrices come in two pieces, det > 0 and det < 0, and a
+   * homeomorphism-mode network can never cross from one to the other while training — so it should
+   * start on the orientation-preserving side when the target keeps orientation.
+   */
+  function orientPositive(net) {
+    for (let l = 0; l < net.nLayers; l++) {
+      const L = net.layout[l];
+      if (L.nin !== L.nout || det(net.weightMatrix(l)) >= 0) continue;
+      for (let j = 0; j < L.nin; j++) net.theta[L.w + j] *= -1;
+      net.theta[L.b] *= -1;
+    }
+  }
+
+  /**
+   * Homeomorphism mode: raise every singular value of every square weight matrix to at least `floor`.
+   * With width = input dimension and injective activations (tanh, sigmoid, identity) the network then
+   * stays a homeomorphism onto its image: it can bend and stretch space but never crush a dimension —
+   * so it cannot tear, glue, unlink or unknot.  Returns how many singular values were raised.
+   */
+  function clampSingularValues(net, floor) {
+    let raised = 0;
+    for (let l = 0; l < net.nLayers; l++) {
+      const L = net.layout[l];
+      if (L.nin !== L.nout) continue;
+      const W = net.weightMatrix(l), { U, s, V } = squareSvd(W);
+      if (s.every((v) => v >= floor)) continue;
+      const s2 = s.map((v) => { if (v < floor) { raised++; return floor; } return v; });
+      for (let i = 0; i < L.nout; i++) {
+        for (let j = 0; j < L.nin; j++) {
+          let v = 0;
+          for (let k = 0; k < L.nin; k++) v += U[k][i] * s2[k] * V[k][j];
+          net.theta[L.w + i * L.nin + j] = v;
+        }
+      }
+    }
+    return raised;
+  }
+
+  // ===========================================================================
   // Training with joint / sequential modes and anti-forgetting methods
   // ===========================================================================
 
@@ -573,6 +730,7 @@
         type: 'mse', optimizer: 'adam', lr: 0.01, batch: 32, mode: 'joint', stepsPerTask: 200,
         method: 'none', ewcLambda: 50, replayPerTask: 32, seed: 1,
         clip: 10, // gradient-norm clipping: keeps stiff losses (e.g. strong EWC + SGD) from blowing up
+        invertibleFloor: 0, // > 0: homeomorphism mode (minimum singular value of square weight matrices)
       }, opts);
       this.rng = new Rng(this.opts.seed * 7919 + 13);
       this.tasks = [];
@@ -633,6 +791,7 @@
       if (o.clip && gn > o.clip) for (let k = 0; k < grad.length; k++) grad[k] *= o.clip / gn;
       if (!Number.isFinite(loss) || !Number.isFinite(gn)) { this.diverged = true; return null; }
       this.optim.step(this.net.theta, grad);
+      if (o.invertibleFloor > 0) clampSingularValues(this.net, o.invertibleFloor);
       this.step_++;
       this.lossHistory.push(this.totalLoss());
       if (o.mode === 'sequential' && ++this.taskStep >= o.stepsPerTask) this.finishTask();
@@ -811,7 +970,7 @@
   const NN = {
     Rng, ACTIVATIONS, ACTIVATION_NAMES, MLP, mse, crossEntropy, sampleLoss, batchLossGrad, meanLoss,
     SGD, Adam, dot, norm, symEig, singularValues, rankOf, pcaBasis, makeDataset, targetMatrix, matVec,
-    makeTransformData, fibonacciSphere, Trainer, gradientCosine, ntkMatrix, spectralNorm, lipschitz, layerReport,
+    makeTransformData, fibonacciSphere, SHAPES, makeShape, morphData, squareSvd, clampSingularValues, det, orientPositive, Trainer, gradientCosine, ntkMatrix, spectralNorm, lipschitz, layerReport,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = NN;
   else root.NN = NN;

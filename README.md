@@ -22,9 +22,11 @@ only to draw the 3D view.
 2. **Send each class to a point.** Training → Task *send each class to a point*, Data *spirals*, press
    **★ Recommended**, then **▶ Train**. Blue points are pulled to (1, 0), red points to (−1, 0); at the
    output the whole plane collapses onto the segment between them.
-3. **Why width matters.** Switch to **3D**, Data *linked rings*, ★ Recommended, train, then set the
-   hidden width to 3 and train again. With width 3 the rings cannot be unlinked without crushing a
-   dimension (the Invertibility panel flags it); with width 4 they separate cleanly.
+3. **Topology experiments: what a network can and cannot do.** Pick one in the *Topology experiments*
+   panel (e.g. 3D → *Unlink the rings*) and press **Run at width d**: the network is a homeomorphism and
+   fails. Then press **+1 dimension**: with one extra dimension it succeeds. Watch "worst point off by" —
+   it is measured on a 50× finer copy of the shape, because the network otherwise cheats by stretching
+   the piece of a curve between two training points around the obstacle.
 4. **Catastrophic forgetting.** Task *pinned points*, drag a few pins, Mode *sequential*, train with
    anti-forgetting *none*, then with *replay*, *OGD* or *EWC*, and compare the Forgetting table.
 
@@ -57,6 +59,11 @@ only to draw the 3D view.
   XOR, a wavy boundary, three nested rings, spirals, a checkerboard, **linked rings** (3D) — and
   **paint your own** with a blue/red brush. SGD or Adam, batch size, learning rate, steps per frame,
   redraw interval, loss curve and accuracy.
+- **Topology.** Ready-made shapes — circle, square, star, figure eight, two circles, disk inside a ring;
+  sphere, ellipsoid, cube, torus, unknotted ring, trefoil knot, linked rings, ball inside a shell — as
+  objects or as training data. A task *turn one shape into another* (point i of one shape → point i of
+  the other), a **homeomorphism mode** that keeps every layer invertible, and one-click experiments
+  that show where invertible networks hit a wall and how one extra dimension gets past it.
 - **Continual learning.** Sequential mode trains on one target (pin, or a chunk of the dataset) at a
   time. Anti-forgetting: replay buffer, orthogonal gradient projection (OGD) or an EWC penalty.
 - **Analysis.** Forgetting `F_A`, gradient interference (cosine matrix) or the neural tangent kernel,
@@ -120,17 +127,51 @@ drastic: squash each class onto a single point (the Jacobian there tends to zero
 tearing the classes apart in between (large `‖J‖` near the decision boundary). With width 2 the whole
 plane typically ends up folded onto the segment between the two target points.
 
-### Topology: why width matters
+### Topology: what a network can and cannot do
 
-A layer whose weight matrix is invertible, followed by tanh or sigmoid, is a continuous map with a
-continuous inverse — it can bend and stretch space but never tear or glue it. Such maps cannot change
-how shapes are arranged *topologically*. A disk inside a ring stays inside it in the plane, and two
-**linked rings** stay linked in 3D, so no stack of invertible width-d layers can pull them apart.
-The app shows both escape routes. With width 3 the network can only get close to separating the
-linked rings by making a weight matrix (nearly) singular — crushing a dimension, which the
-Invertibility panel flags as "rank-deficient". It still plateaus around 98% accuracy. With width 4 it
-uses the extra dimension to unlink them cleanly (100%, loss → 0). This is the argument of Chris Olah's
-essay *Neural Networks, Manifolds, and Topology* (2014), made interactive.
+A layer whose weight matrix is invertible, followed by an injective activation (tanh, sigmoid,
+identity), is a continuous map with a continuous inverse. A stack of them with width equal to the
+dimension *d* is therefore a **homeomorphism**: it can bend and stretch space, but never tear or glue it.
+Everything topological is preserved: the number of pieces, holes, which shape lies inside which, how
+curves are linked or knotted — and even orientation. Invertible matrices come in two pieces (det > 0 and
+det < 0), and training that keeps them invertible can never cross from one to the other.
+
+The app's **homeomorphism mode** enforces this: after every step it raises the smallest singular value
+of each square weight matrix to at least 0.2. The **Topology experiments** panel then runs each task at
+width *d* and with one extra dimension (*d* + 1). The extra dimension lets shapes pass around each
+other (a ring can slip past another ring in 4D, and every knot comes undone there). The final layer
+back to *d* dimensions is a projection, so it can also glue points together.
+
+Measured with `node test/topology_experiments.js` (the app's settings; "worst" = largest distance of
+a point from its target on a 50× finer copy of the shape):
+
+| Experiment | Width *d* (homeomorphism) | Width *d* + 1 |
+|---|---|---|
+| 2D control: circle → square | worst 0.10–0.14, solved 4/4 | 0.05–0.07, 4/4 |
+| 2D: disk out of the ring (→ two points) | 1.5–2.1, **0/4** | ≤ 0.25, 4/4 |
+| 2D: two circles → one circle | 1.1–1.7, **0/4** | ≤ 0.02, 4/4 |
+| 2D: circle → figure eight | 0.47–0.65, **0/4** | ≤ 0.02, 4/4 |
+| 3D control: sphere → ellipsoid | ≤ 0.02, 4/4 | ≤ 0.01, 4/4 |
+| 3D: unlink two linked rings (→ two points) | ≈ 2.0, **0/4** | solved in **2 of 8** runs |
+| 3D: ball out of the shell (→ two points) | 1.9–2.1, **0/4** | ≤ 0.07, 4/4 |
+| 3D: unknot → trefoil knot | 0.37–0.51, **0/4** | ≤ 0.04 in 3 of 4 runs |
+| 3D: torus → sphere (close the hole) | 0.39–0.62, **0/4** | 0.17–0.26 — better, never near zero |
+
+Three lessons came out of building this:
+
+- **Accuracy hides the obstruction.** At width 3 the linked rings reach 99.8% accuracy, yet the worst
+  point sits at the *other* ring's target (distance ≈ 2). A homeomorphism can get almost everything
+  right, but somewhere it must fail.
+- **Finite samples can be cheated.** Without the finer check, a long run at width 3 — still a
+  homeomorphism — brought the error on the 400 training points down to 0.01. It had not torn anything:
+  it stretched the tiny piece of one ring *between two of its training points* all the way around the
+  other ring. On a denser copy of the curve the error was still 2.0.
+- **Possible is not the same as easy to find.** One extra dimension makes unlinking possible, but
+  gradient descent finds the solution only in some runs. Closing a torus's hole improves a lot with
+  the extra dimension but is not solved here.
+
+This is the argument of Chris Olah's essay *Neural Networks, Manifolds, and Topology* (2014) and of
+*Augmented Neural ODEs* (Dupont, Doucet & Teh, 2019), made interactive.
 
 ### The Jacobian: the local picture
 
