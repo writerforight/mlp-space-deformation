@@ -292,7 +292,7 @@
         <div class="group-label">Overlays</div>
         <div class="checks">
           <label data-tip="Image of a small circle under the local Jacobian: shows local stretching, squashing and rotation."><input id="showJac" type="checkbox"> Jacobian ellipses</label>
-          <label data-tip="Colour by the sign of det(J): green keeps orientation, red is mirrored (a fold), grey is collapsed."><input id="showDet" type="checkbox"> det(J) sign</label>
+          <label data-tip="Colour by the sign of det(J): green keeps orientation, violet is mirrored (a fold), grey is collapsed."><input id="showDet" type="checkbox"> det(J) sign</label>
           <label data-tip="Colour each point by how far it has moved from its input position."><input id="showDist" type="checkbox"> Distance moved</label>
         </div>
         <div class="group-label">View</div>
@@ -400,7 +400,7 @@
       <canvas id="netCanvas"></canvas>
     </div>
     <div id="stagebar">
-      <button id="netToggle" data-tip="Show / hide the network diagram: neurons, weights (blue +, red −) and the values at the probe point. Click a layer to inspect it.">◫ Network</button>
+      <button id="netToggle" data-tip="Show / hide the network diagram: neurons, weights (gold +, violet −) and the values at the probe point. Click a layer to inspect it.">◫ Network</button>
       <button id="play" data-tip="Animate through the layers (Space).">▶</button>
       <button id="stepBack" data-tip="Previous sub-step (←).">⏮</button>
       <button id="stepFwd" data-tip="Next sub-step: linear, then activation (→).">⏭</button>

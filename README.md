@@ -20,7 +20,7 @@ only to draw the 3D view.
 1. **Watch a network bend space.** Press ▶ under the view: the grid, the unit circle and the example
    objects go through each layer — first the linear map, then the activation.
 2. **Look inside a layer.** Press **◫ Network** under the view and click a layer in the diagram. The
-   *Layer inspector* on the right shows its weight matrix `W` and bias `b` as a heatmap (blue +, red −),
+   *Layer inspector* on the right shows its weight matrix `W` and bias `b` as a heatmap (gold +, violet −; blue and red always mean the two classes),
    its activation function with the derivative and a histogram of where the points actually land, and
    how every weight moved during training. Double-click a weight, type a new value and watch the
    deformation change.
@@ -49,14 +49,14 @@ only to draw the 3D view.
   after each layer — every layer is split into its **linear** step (`z = W a + b`) and its
   **activation** step (`a = σ(z)`), with a smooth morph in between.
 - **Network diagram and layer inspector.** A strip under the view draws the network: one column per
-  layer, edges coloured and weighted by `W` (blue positive, red negative), neurons filled by their value
+  layer, edges coloured and weighted by `W` (gold positive, violet negative), neurons filled by their value
   at the probe point. Click a layer to inspect it: `W`/`b` heatmap with the change since initialization
   under each cell, singular values, rank, `det W`, norms; the activation `σ(z)` and `σ′(z)` with a
   histogram of the pre-activations `z` (and a note such as "26 % of the values are in the flat tails of
   tanh"); and the history of every weight of the layer over training. Any weight or bias can be edited
   by double-clicking it.
 - **Overlays.** Local Jacobian ellipses (how a tiny circle is deformed), the sign of `det J`
-  (green = orientation kept, red = mirrored, i.e. a fold) and the distance each point moved.
+  (green = orientation kept, violet = mirrored, i.e. a fold) and the distance each point moved.
 - **Network.** 1–8 layers, hidden width 1–16 (wider layers are shown through a PCA projection),
   per-layer activation (identity, ReLU, tanh, sigmoid, GELU, sin), initialization (normal, uniform,
   Xavier, He) with scale and seed, and a **temperature** slider that randomizes the activations.

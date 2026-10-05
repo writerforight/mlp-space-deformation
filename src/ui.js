@@ -434,7 +434,7 @@
     const J = jacAt(d, tt), vd = traces.vd, k = vd * vd, n = J.length / k, out = [];
     for (let i = 0; i < n; i++) {
       const v = vd === 2 ? det2(J, i * k) : det3(J, i * k);
-      out.push(v > 1e-6 ? '#3fb950' : v < -1e-6 ? '#f85149' : '#8b949e');
+      out.push(v > 1e-6 ? '#3fb950' : v < -1e-6 ? '#bc8cff' : '#8b949e');
     }
     return out;
   }
@@ -1123,7 +1123,7 @@
       Charts.heatmap($('heatmap'), M, { mode: kind === 'ntk' ? 'sequential' : 'diverging' });
       $('heatNote').textContent = kind === 'ntk'
         ? `K(xᵢ, xⱼ) = tr(Jᵢ Jⱼᵀ) for the ${samples.length} ${S.train.target === 'pins' ? 'pins' : 'numbered points in the view'}; brighter = training one point moves the other's output more.`
-        : `cos(∇Lᵢ, ∇Lⱼ) for the ${samples.length} ${S.train.target === 'pins' ? 'pins' : 'numbered points in the view'}: red = they agree, blue = they fight (interference).`;
+        : `cos(∇Lᵢ, ∇Lⱼ) for the ${samples.length} ${S.train.target === 'pins' ? 'pins' : 'numbered points in the view'}: gold = they agree, violet = they fight (interference).`;
     }
   }
 

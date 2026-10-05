@@ -1,7 +1,7 @@
 /*
  * inspector.js — the network diagram and the layer inspector.
  *
- *   drawNetwork    neurons as columns, weights as lines (blue +, red −, thickness ∝ |w|), each neuron
+ *   drawNetwork    neurons as columns, weights as lines (gold +, violet −, thickness ∝ |w|), each neuron
  *                  coloured by its value at the probe point; returns hit regions so a click selects a layer
  *   drawWeights    the weight matrix W (rows = output neurons, columns = inputs) and bias b as a heatmap
  *                  with the numbers written in; returns cell rectangles for hover / double-click editing
@@ -14,7 +14,8 @@
   'use strict';
 
   const C = {
-    pos: [88, 166, 255], neg: [248, 81, 73], text: '#e6edf3', muted: '#8b949e', line: '#30363d',
+    // sign colours: gold = positive, violet = negative (blue/red are reserved for the two classes)
+    pos: [227, 179, 65], neg: [188, 140, 255], text: '#e6edf3', muted: '#8b949e', line: '#30363d',
     grid: 'rgba(255,255,255,0.06)', accent: '#58a6ff', panel: '#1c2128', sel: 'rgba(31,111,235,0.18)',
   };
   const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
@@ -29,6 +30,9 @@
   }
 
   /** Signed value → colour: blue (+) / red (−), opacity by magnitude relative to `scale`. */
+  // one colour per output neuron in the history chart (no class blue / red)
+  const ROWS = [[227, 179, 65], [188, 140, 255], [63, 185, 160], [247, 120, 186], [255, 166, 87], [165, 214, 167], [210, 168, 255], [121, 192, 180]];
+
   function signed(v, scale, minA = 0.12) {
     const a = Math.min(1, Math.abs(v) / (scale || 1));
     return rgba(v >= 0 ? C.pos : C.neg, minA + (1 - minA) * a);
@@ -149,7 +153,7 @@
           ctx.fillRect(x + 1, y + cell - 5, Math.max(1, len), 2);
         }
         if (showNum) {
-          ctx.fillStyle = Math.abs(v) / mx > 0.55 ? '#ffffff' : C.text;
+          ctx.fillStyle = Math.abs(v) / mx > 0.55 ? (v > 0 ? '#0d1117' : '#ffffff') : C.text;
           let t = fmt(v), tw = ctx.measureText(t).width;
           if (tw > cell - 6) { t = v.toFixed(1); tw = ctx.measureText(t).width; }
           ctx.fillText(t, x + (cell - 2 - tw) / 2, y + cell / 2 + 2);
@@ -214,11 +218,11 @@
       arr.forEach((v, k) => { const x = X(lo + ((hi - lo) * k) / N), y = Y(v); k ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
       ctx.stroke(); ctx.setLineDash([]);
     };
-    curve(dz, 'rgba(255,214,102,0.85)', [4, 4]);
+    curve(dz, 'rgba(201,209,217,0.8)', [4, 4]);
     curve(fz, C.accent);
     ctx.fillStyle = 'rgba(13,17,23,0.75)'; ctx.fillRect(pad.l + 4, pad.t, 92, 28);
     ctx.fillStyle = C.accent; ctx.fillText(`— ${act}(z)`, pad.l + 8, pad.t + 11);
-    ctx.fillStyle = 'rgba(255,214,102,0.95)'; ctx.fillText(`- - ${act}′(z)`, pad.l + 8, pad.t + 23);
+    ctx.fillStyle = 'rgba(201,209,217,0.95)'; ctx.fillText(`- - ${act}′(z)`, pad.l + 8, pad.t + 23);
   }
 
   // ---------------------------------------------------------------------------
@@ -249,8 +253,7 @@
     ctx.fillText(hi.toFixed(2), 2, pad.t + 8); ctx.fillText(lo.toFixed(2), 2, h - pad.b);
     ctx.fillText(byIndex ? 'start' : `step ${s0}`, pad.l, h - 4); const e = byIndex ? `edit ${n - 1}` : `step ${s1}`; ctx.fillText(e, w - pad.r - ctx.measureText(e).width, h - 4);
     for (const ln of lines) {
-      const hue = (ln.row * 360) / Math.max(1, L.nout);
-      ctx.strokeStyle = `hsla(${hue}, 70%, 65%, ${ln.bias ? 0.55 : 0.9})`;
+      ctx.strokeStyle = rgba(ROWS[ln.row % ROWS.length], ln.bias ? 0.55 : 0.9);
       ctx.lineWidth = ln.bias ? 1 : 1.4; ctx.setLineDash(ln.bias ? [3, 3] : []);
       ctx.beginPath();
       history.forEach((s, k) => { const x = X(s.step, k), y = Y(s.theta[ln.off]); k ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });

@@ -264,7 +264,7 @@
       ctx.setLineDash([]);
     },
 
-    /** Matrix heatmap. mode 'diverging' maps [-1, 1] blue→black→red; 'sequential' maps [0, max]. */
+    /** Matrix heatmap. mode 'diverging' maps [-1, 1] violet→black→gold; 'sequential' maps [0, max]. */
     heatmap(canvas, M, opt = {}) {
       const { ctx, w, h } = prep(canvas);
       const n = M.length;
@@ -303,8 +303,9 @@
   function divColor(v) {
     const t = Math.max(-1, Math.min(1, v));
     const a = Math.abs(t);
-    return t >= 0 ? `rgb(${Math.round(40 + 200 * a)},${Math.round(40 + 40 * a)},${Math.round(50 + 20 * a)})`
-      : `rgb(${Math.round(40 + 20 * a)},${Math.round(60 + 90 * a)},${Math.round(60 + 190 * a)})`;
+    // gold for +, violet for − (blue / red are reserved for the two classes)
+    return t >= 0 ? `rgb(${Math.round(30 + 197 * a)},${Math.round(30 + 149 * a)},${Math.round(36 + 29 * a)})`
+      : `rgb(${Math.round(30 + 158 * a)},${Math.round(30 + 110 * a)},${Math.round(36 + 219 * a)})`;
   }
   /** Sequential colour for t ∈ [0, 1] (dark → teal → yellow, a viridis-like ramp). */
   function seqColor(t) {
