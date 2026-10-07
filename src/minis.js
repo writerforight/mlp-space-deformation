@@ -252,6 +252,83 @@
     };
   }
 
+
+  // ---- one layer, step by step: x  ->  W x + b  ->  sigma(W x + b) ---------------------------------------
+  /**
+   * W: 2 x 2 (a block of a layer's weights), b: 2 numbers, act: activation name.  Every point of a grid and
+   * of the unit circle gets three positions: the input, after the linear step, after the activation.
+   */
+  function layerScene(W, b, act) {
+    const f = NN.ACTIVATIONS[act].f;
+    const lin = (p) => [W[0][0] * p[0] + W[0][1] * p[1] + b[0], W[1][0] * p[0] + W[1][1] * p[1] + b[1]];
+    const stagesOf = (pts) => {
+      const z = pts.map(lin);
+      return [pts.map((p) => [p[0], p[1]]), z, z.map((q) => [f(q[0]), f(q[1])])];
+    };
+    const items = gridLines(2, 2, 9, 40).map((pts) => ({ color: GRID, alpha: 0.55, width: 1, stages: stagesOf(pts) }));
+    const circle = [...Array(121)].map((_, i) => [Math.cos((2 * Math.PI * i) / 120), Math.sin((2 * Math.PI * i) / 120)]);
+    items.push({ color: OBJ, alpha: 1, width: 2.2, stages: stagesOf(circle) });
+    return { items };
+  }
+
+  // timeline of the loop: [stage it moves from, stage it moves to, seconds]
+  const LAYER_STEPS = [[0, 0, 0.8], [0, 1, 1.4], [1, 1, 0.9], [1, 2, 1.4], [2, 2, 1.5], [2, 0, 0.9]];
+  const LAYER_PERIOD = LAYER_STEPS.reduce((a, s) => a + s[2], 0);
+
+  /** Draws a layerScene; draw(t) returns the stage (0, 1, 2) being shown or moved to. */
+  function layerPlayer(canvas, sc) {
+    const ctx = canvas.getContext('2d');
+    // one view box per stage; the camera glides between them, so a squashed stage (e.g. after tanh) still
+    // fills the picture.  The ±1 ticks on the axes keep the change of scale visible.
+    const boxes = [0, 1, 2].map((k) => {
+      const lo = [-1, -1], hi = [1, 1];
+      for (const it of sc.items) for (const p of it.stages[k]) {
+        for (let d = 0; d < 2; d++) { lo[d] = Math.min(lo[d], p[d]); hi[d] = Math.max(hi[d], p[d]); }
+      }
+      return { lo, hi };
+    });
+    function draw(t, still) {
+      const w = canvas.clientWidth, h = canvas.clientHeight, dpr = window.devicePixelRatio || 1;
+      if (!w || !h) return 0;
+      if (canvas.width !== Math.round(w * dpr)) { canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr); }
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, w, h);
+      let a = 2, b = 2, u = 0;
+      if (!still) {
+        let r = t % LAYER_PERIOD;
+        for (const [from, to, dur] of LAYER_STEPS) {
+          if (r < dur) { a = from; b = to; u = ease(r / dur); break; }
+          r -= dur;
+        }
+      }
+      const lo = [0, 1].map((d) => boxes[a].lo[d] + u * (boxes[b].lo[d] - boxes[a].lo[d]));
+      const hi = [0, 1].map((d) => boxes[a].hi[d] + u * (boxes[b].hi[d] - boxes[a].hi[d]));
+      const pad = 16, span = Math.max(hi[0] - lo[0], hi[1] - lo[1], 1e-6), k = (Math.min(w, h) - 2 * pad) / span;
+      const cx = (lo[0] + hi[0]) / 2, cy = (lo[1] + hi[1]) / 2;
+      const X = (x) => w / 2 + k * (x - cx), Y = (y) => h / 2 - k * (y - cy);
+      ctx.strokeStyle = 'rgba(139,148,158,0.35)'; ctx.lineWidth = 1;          // axes with ticks at ±1
+      ctx.beginPath(); ctx.moveTo(0, Y(0)); ctx.lineTo(w, Y(0)); ctx.moveTo(X(0), 0); ctx.lineTo(X(0), h);
+      for (const v of [-1, 1]) { ctx.moveTo(X(v), Y(0) - 3); ctx.lineTo(X(v), Y(0) + 3); ctx.moveTo(X(0) - 3, Y(v)); ctx.lineTo(X(0) + 3, Y(v)); }
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(139,148,158,0.8)'; ctx.font = '10px ui-monospace, monospace'; ctx.textAlign = 'center';
+      ctx.fillText('1', X(1), Y(0) + 13); ctx.fillText('−1', X(-1), Y(0) + 13);
+      ctx.textAlign = 'left'; ctx.fillText('1', X(0) + 5, Y(1) + 3);
+      for (const it of sc.items) {
+        const A = it.stages[a], B = it.stages[b];
+        ctx.globalAlpha = it.alpha; ctx.strokeStyle = it.color; ctx.lineWidth = it.width;
+        ctx.beginPath();
+        for (let i = 0; i < A.length; i++) {
+          const x = A[i][0] + u * (B[i][0] - A[i][0]), y = A[i][1] + u * (B[i][1] - A[i][1]);
+          if (i) ctx.lineTo(X(x), Y(y)); else ctx.moveTo(X(x), Y(y));
+        }
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+      return b;
+    }
+    return { draw };
+  }
+
   // ---- drawing (browser) ------------------------------------------------------------------------------
   const HOLD_IN = 0.8, MOVE = 1.8, HOLD_OUT = 1.6, PERIOD = 2 * MOVE + HOLD_IN + HOLD_OUT;
   const ease = (u) => (u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2);
@@ -356,7 +433,7 @@
     return { draw };
   }
 
-  const Minis = { scene, sceneAsync, dataScene, player, phase, PERIOD, DATASETS, MAPS, PAIRS, PAIR_BLURBS };
+  const Minis = { scene, sceneAsync, dataScene, layerScene, layerPlayer, player, phase, PERIOD, DATASETS, MAPS, PAIRS, PAIR_BLURBS };
   if (typeof module !== 'undefined' && module.exports) module.exports = Minis;
   else root.Minis = Minis;
 })(typeof window !== 'undefined' ? window : globalThis);

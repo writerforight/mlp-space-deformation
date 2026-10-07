@@ -194,9 +194,13 @@
   }
 
   /* ======================= guided start (src/wizard.js) ======================= */
-  #wizard { position: fixed; inset: 0; z-index: 50; background: var(--bg); display: flex; flex-direction: column;
-    transition: opacity 0.28s ease; }
-  #wizard.closing { opacity: 0; pointer-events: none; }
+  /* motion: the outgoing screen fades quickly, the incoming one glides in a moment later, so the two never compete */
+  #wizard { --wz-ease: cubic-bezier(0.22, 0.61, 0.36, 1); --wz-in: 0.46s; --wz-out: 0.22s; --wz-shift: 28px;
+    position: fixed; inset: 0; z-index: 50; background: var(--bg); display: flex; flex-direction: column;
+    transition: opacity 0.55s var(--wz-ease), transform 0.55s var(--wz-ease); animation: wzFade 0.5s var(--wz-ease); }
+  #wizard.closing { opacity: 0; transform: scale(1.015); pointer-events: none; }
+  @keyframes wzFade { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes wzRise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
   body.wizard-open { overflow: hidden; }
   .wz-top { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--line);
     background: var(--panel); min-height: 49px; }
@@ -220,12 +224,16 @@
   .wz-screen { position: absolute; inset: 0; overflow-y: auto; padding: 48px 16px 40px; display: flex; flex-direction: column;
     align-items: center; opacity: 0; visibility: hidden; transform: translateX(0);
     scrollbar-color: #30363d var(--bg); scrollbar-width: thin;
-    transition: transform 0.28s ease, opacity 0.28s ease, visibility 0s linear 0.28s; }
-  .wz-screen.active { opacity: 1; visibility: visible; transition: transform 0.28s ease, opacity 0.28s ease; }
-  .wz-screen.enter-right { transform: translateX(60px); transition: none; }
-  .wz-screen.enter-left { transform: translateX(-60px); transition: none; }
-  .wz-screen.leave-left { transform: translateX(-60px); }
-  .wz-screen.leave-right { transform: translateX(60px); }
+    transition: transform var(--wz-out) ease-in, opacity var(--wz-out) ease-in, visibility 0s linear var(--wz-out); }
+  .wz-screen.active { opacity: 1; visibility: visible;
+    transition: transform var(--wz-in) var(--wz-ease) 0.12s, opacity var(--wz-in) var(--wz-ease) 0.12s; }
+  .wz-screen.enter-right { transform: translateX(var(--wz-shift)); transition: none; }
+  .wz-screen.enter-left { transform: translateX(calc(-1 * var(--wz-shift))); transition: none; }
+  .wz-screen.leave-left { transform: translateX(calc(-0.5 * var(--wz-shift))); }
+  .wz-screen.leave-right { transform: translateX(calc(0.5 * var(--wz-shift))); }
+  /* cards and sub-views rise in one after another when they appear */
+  .wz-screen.active .wz-card, .wz-sub.appear { animation: wzRise 0.5s var(--wz-ease) backwards; }   /* backwards: hover lift still works afterwards */
+  .wz-screen.active .wz-card { animation-delay: calc(0.14s + var(--i, 0) * 0.05s); }
   .wz-screen h2 { font-size: 26px; font-weight: 650; margin: 0 0 6px; text-align: center; }
   .wz-screen .lead { color: var(--muted); font-size: 15px; margin: 0 0 32px; text-align: center; max-width: 620px; }
   .wz-cards { display: grid; gap: 20px; width: 100%; max-width: 1060px; justify-content: center;
@@ -280,8 +288,32 @@
   .wz-net-controls .row > label:first-child { width: 110px; }
   #wzNetNotes { max-width: 640px; }
   #wzNetNotes:empty { display: none; }
+  .wz-net-row { width: 100%; display: grid; grid-template-columns: minmax(0, 400px) minmax(0, 560px); gap: 28px; justify-content: center; align-items: start; }
+  .wz-eq { font: 13px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text); background: var(--panel2);
+    border: 1px solid var(--line); border-radius: 6px; padding: 6px 9px; margin: 2px 0 8px; }
+  .wz-layerdemo { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+  .wz-ld-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; }
+  .wz-ld-head .tag { margin-left: auto; }
+  .wz-ld-body { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 14px; align-items: center; }
+  .wz-ld-math { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+  .wz-ld-eq { display: flex; align-items: center; gap: 6px; }
+  .wz-ld-eq .op { color: var(--muted); font: 13px ui-monospace, monospace; }
+  .wz-matrix { display: inline-grid; gap: 2px; padding: 3px 5px; position: relative; font: 12px ui-monospace, monospace;
+    border-left: 1.5px solid var(--muted); border-right: 1.5px solid var(--muted); border-radius: 5px; }
+  .wz-matrix span { min-width: 40px; height: 22px; display: grid; place-items: center; border-radius: 3px; color: var(--text); }
+  .wz-matrix span.dots { color: var(--muted); min-width: 16px; background: none !important; }
+  .wz-ld-note { color: var(--muted); font-size: 12px; max-width: 220px; }
+  .wz-ld-act { font: 12px ui-monospace, monospace; color: var(--text); }
+  #wzLdCanvas { width: 100%; aspect-ratio: 1; display: block; background: var(--bg); border-radius: 8px; }
+  .wz-ld-stages { display: flex; justify-content: center; gap: 8px; margin-top: 10px; font: 13px ui-monospace, monospace; color: var(--muted); }
+  .wz-ld-stages span[data-s] { padding: 2px 8px; border-radius: 10px; border: 1px solid transparent; transition: all 0.2s; }
+  .wz-ld-stages span.on { color: var(--text); border-color: var(--accent); background: rgba(31, 111, 235, 0.18); }
+  #wzNetSvg g.wz-layer { cursor: pointer; }
+  #wzNetSvg g.wz-layer:hover rect.frame { stroke: var(--muted); }
+  @media (max-width: 960px) { .wz-net-row { grid-template-columns: 1fr; } }
   @media (prefers-reduced-motion: reduce) {
-    .wz-screen, .wz-screen.active, #wizard, .wz-card { transition: none; }
+    .wz-screen, .wz-screen.active, #wizard, .wz-card { transition: none; animation: none !important; }
+    .wz-sub.appear { animation: none; }
   }
 </style>
 </head>
@@ -661,14 +693,29 @@
         </div>
         <div class="wz-diagram"><svg id="wzNetSvg" role="img" aria-label="Network as weight matrices"></svg></div>
         <div class="wz-net-info" id="wzNetInfo"></div>
-        <div class="wz-net-controls">
+        <div class="wz-net-row">
+          <div class="wz-net-controls">
           <div class="row"><label data-tip="How many weight matrices (linear step + activation) the input passes through.">Layers</label>
             <input id="wzLayers" type="range" min="1" max="8" step="1"><span class="val" id="wzLayersVal"></span></div>
           <div class="row"><label data-tip="Neurons in each hidden layer = rows of the hidden weight matrices.">Hidden width</label>
             <input id="wzWidth" type="range" min="1" max="16" step="1"><span class="val" id="wzWidthVal"></span></div>
           <div class="row"><label data-tip="The function applied to every number after each linear step.">Activation</label>
             <select id="wzAct"></select></div>
+          <div class="wz-eq" id="wzActEq"></div>
           <div class="checks single"><label data-tip="No activation after the last matrix, so outputs can take any value. Usually what training wants."><input id="wzOutLin" type="checkbox"> Linear output layer</label></div>
+          </div>
+          <div class="wz-layerdemo">
+            <div class="wz-ld-head"><b>One layer, step by step</b><span class="tag" id="wzLdWhich"></span></div>
+            <div class="wz-ld-body">
+              <div class="wz-ld-math">
+                <div class="wz-ld-eq"><span class="wz-matrix" id="wzLdW"></span><span class="op">x +</span><span class="wz-matrix" id="wzLdB"></span></div>
+                <div class="wz-ld-note" id="wzLdNote"></div>
+                <div class="wz-ld-act" id="wzLdAct"></div>
+              </div>
+              <canvas id="wzLdCanvas"></canvas>
+            </div>
+            <div class="wz-ld-stages" id="wzLdStages"><span data-s="0">x</span><span class="arr">→</span><span data-s="1">W x + b</span><span class="arr">→</span><span data-s="2">σ(W x + b)</span></div>
+          </div>
         </div>
         <ul class="warnlist" id="wzNetNotes"></ul>
       </div>

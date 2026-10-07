@@ -14,7 +14,7 @@
   'use strict';
 
   const STEPS = ['intro', 'dimension', 'problem', 'data', 'network'];
-  const SLIDE_MS = 280;
+  const SLIDE_MS = 600;          // long enough for the slowest screen / close transition (see #wizard in index.html)
 
   const choice = { dim: null, problem: null, data: null, network: null };
   let current = 'intro';
@@ -79,8 +79,10 @@
     players.forEach((p, canvas) => {
       if (!sec.contains(canvas)) return;
       if (!p.player && scenes[p.key]) p.player = Minis.player(canvas, scenes[p.key], p.dim);
-      if (p.player) p.player.draw(now / 1000, reduceMotion);
-      else drawLoading(canvas);
+      if (p.player) {
+        const stage = p.player.draw(now / 1000, reduceMotion);
+        if (p.onStage) p.onStage(stage);
+      } else drawLoading(canvas);
     });
     requestAnimationFrame(frame);
   }
@@ -117,6 +119,13 @@
     transform: ['Which linear map?', 'The network learns to send every point x to A·x. Open a card to set the amount.'],
     morph: ['Which shapes?', 'Point i of the first shape should land on point i of the second.'],
   };
+
+  /** Show a hidden sub-view with the rise animation (restarted every time). */
+  function appear(node) {
+    node.classList.remove('hidden', 'appear');
+    void node.offsetWidth;
+    node.classList.add('appear');
+  }
 
   function forgetDetached() {
     players.forEach((_, canvas) => { if (!canvas.isConnected) players.delete(canvas); });
@@ -180,7 +189,7 @@
     redrawDetail();
     const list = $('wzDataList'), det = $('wzDataDetail');
     list.classList.add('hidden');
-    det.classList.remove('hidden');
+    appear(det);
     screen('data').scrollTop = 0;
     $('wzDataUse').focus({ preventScroll: true });
   }
@@ -195,7 +204,8 @@
     if (!detail && silent) return;
     detail = null;
     $('wzDataDetail').classList.add('hidden');
-    $('wzDataList').classList.remove('hidden');
+    if (silent) $('wzDataList').classList.remove('hidden');
+    else appear($('wzDataList'));
     players.delete($('wzDataCanvas'));
   }
 
@@ -324,18 +334,23 @@
     const d = net.inDim;
     vector(d, 'x', `ℝ${d === 2 ? '²' : '³'}`);
     link('');
+    demoLayer = Math.min(demoLayer, net.nLayers - 1);
     net.layout.forEach((L, l) => {
       const y0 = midY - (L.nout * c) / 2;
+      const lg = el('g', { class: 'wz-layer', 'data-layer': l }, g);
+      // frame around W and b: highlighted for the layer the demo below shows; also the click target
+      el('rect', { class: 'frame', x: x - 5, y: y0 - 27, width: (L.nin + 1) * c + 15, height: L.nout * c + 50, rx: 6,
+        fill: 'transparent', stroke: l === demoLayer ? '#58a6ff' : 'transparent', 'stroke-width': 1.5 }, lg);
       for (let i = 0; i < L.nout; i++) {
         for (let j = 0; j < L.nin; j++) {
-          el('rect', { x: x + j * c, y: y0 + i * c, width: c - gap, height: c - gap, rx: 2, fill: color(net.theta[L.w + i * L.nin + j]) }, g);
+          el('rect', { x: x + j * c, y: y0 + i * c, width: c - gap, height: c - gap, rx: 2, fill: color(net.theta[L.w + i * L.nin + j]) }, lg);
         }
-        el('rect', { x: x + L.nin * c + 5, y: y0 + i * c, width: c - gap, height: c - gap, rx: 2, fill: color(net.theta[L.b + i]) }, g);
+        el('rect', { x: x + L.nin * c + 5, y: y0 + i * c, width: c - gap, height: c - gap, rx: 2, fill: color(net.theta[L.b + i]) }, lg);
       }
       const wMid = x + (L.nin * c) / 2;
-      el('text', { x: wMid, y: y0 - 10, 'text-anchor': 'middle', class: 'lbl' }, g, `W${sub(l + 1)}`);
-      el('text', { x: x + L.nin * c + 5 + (c - gap) / 2, y: y0 - 10, 'text-anchor': 'middle' }, g, `b${sub(l + 1)}`);
-      el('text', { x: wMid + 2.5 + c / 2, y: y0 + L.nout * c + 16, 'text-anchor': 'middle' }, g, `${L.nout}×${L.nin}`);
+      el('text', { x: wMid, y: y0 - 10, 'text-anchor': 'middle', class: 'lbl' }, lg, `W${sub(l + 1)}`);
+      el('text', { x: x + L.nin * c + 5 + (c - gap) / 2, y: y0 - 10, 'text-anchor': 'middle' }, lg, `b${sub(l + 1)}`);
+      el('text', { x: wMid + 2.5 + c / 2, y: y0 + L.nout * c + 16, 'text-anchor': 'middle' }, lg, `${L.nout}×${L.nin}`);
       x += (L.nin + 1) * c + 5;
       const act = net.acts[l];
       link(act === 'identity' ? 'linear' : act);
@@ -353,6 +368,8 @@
       b.classList.toggle('on', p.layers === n.layers && (n.layers === 1 || p.width === n.width) && p.act === n.act && p.outputLinear === n.outputLinear);
     });
     $('wzNetNotes').innerHTML = netNotes(n).map((t) => `<li>${t}</li>`).join('');
+    $('wzActEq').textContent = ACT_EQ[n.act];
+    renderLayerDemo(net);
   }
 
   /** Plain-language warnings about what this network cannot do on the chosen problem. */
@@ -378,6 +395,65 @@
     }
     return out;
   }
+
+
+  // ---- activation formula and the one-layer demo --------------------------------------------------------
+  const ACT_EQ = {
+    tanh: 'σ(z) = tanh(z) = (eᶻ − e⁻ᶻ) / (eᶻ + e⁻ᶻ)',
+    relu: 'σ(z) = max(0, z)',
+    sigmoid: 'σ(z) = 1 / (1 + e⁻ᶻ)',
+    gelu: 'σ(z) = ½ z (1 + tanh(√(2/π) (z + 0.044715 z³)))',
+    sin: 'σ(z) = sin(z)',
+    identity: 'σ(z) = z   (linear: no bending)',
+  };
+  let demoLayer = 0;            // which layer the demo shows (click a matrix in the diagram)
+
+  /**
+   * The top-left 2 x 2 block of layer `demoLayer` and the first two biases, as a 2D map the eye can follow.
+   * A layer with only one input or output is padded with zeros (it squashes the plane onto a line).
+   */
+  function renderLayerDemo(net) {
+    demoLayer = Math.min(demoLayer, net.nLayers - 1);
+    const L = net.layout[demoLayer], th = net.theta;
+    const w = (i, j) => (i < L.nout && j < L.nin ? th[L.w + i * L.nin + j] : 0);
+    const W = [[w(0, 0), w(0, 1)], [w(1, 0), w(1, 1)]];
+    const b = [0, 1].map((i) => (i < L.nout ? th[L.b + i] : 0));
+    const act = net.acts[demoLayer];
+    let maxAbs = 1e-9;
+    for (const v of th) maxAbs = Math.max(maxAbs, Math.abs(v));
+    const cell = (v) => {
+      const a = 0.18 + 0.82 * Math.min(1, Math.abs(v) / maxAbs), k = v >= 0 ? POS : NEG;
+      return `<span style="background:rgba(${k[0]},${k[1]},${k[2]},${(0.75 * a).toFixed(3)})">${v.toFixed(2)}</span>`;
+    };
+    const dots = (t) => `<span class="dots">${t}</span>`;
+    const moreCols = L.nin > 2, moreRows = L.nout > 2;
+    let wh = '';
+    for (let i = 0; i < 2; i++) wh += cell(W[i][0]) + cell(W[i][1]) + (moreCols ? dots('⋯') : '');
+    if (moreRows) wh += dots('⋮') + dots('⋮') + (moreCols ? dots('⋱') : '');
+    $('wzLdW').style.gridTemplateColumns = `repeat(${moreCols ? 3 : 2}, auto)`;
+    $('wzLdW').innerHTML = wh;
+    $('wzLdB').style.gridTemplateColumns = 'auto';
+    $('wzLdB').innerHTML = cell(b[0]) + cell(b[1]) + (moreRows ? dots('⋮') : '');
+    $('wzLdWhich').textContent = `layer ${demoLayer + 1} of ${net.nLayers} · click a matrix above`;
+    const shape = `${L.nout}×${L.nin}`;
+    $('wzLdNote').textContent = L.nout === 2 && L.nin === 2
+      ? `W${sub(demoLayer + 1)} is exactly 2×2: the animation is the whole layer.`
+      : `W${sub(demoLayer + 1)} is ${shape}. The animation uses its top-left 2×2 block: the first two neurons, fed by the first two inputs${L.nout < 2 || L.nin < 2 ? ' (missing entries are 0)' : ''}.`;
+    $('wzLdAct').textContent = ACT_EQ[act];
+    const canvas = $('wzLdCanvas');
+    players.set(canvas, { key: 'layer', dim: 2, player: Minis.layerPlayer(canvas, Minis.layerScene(W, b, act)), onStage: showStage });
+  }
+
+  function showStage(k) {
+    $('wzLdStages').querySelectorAll('[data-s]').forEach((e) => e.classList.toggle('on', +e.dataset.s === k));
+  }
+
+  $('wzNetSvg').addEventListener('click', (e) => {
+    const g = e.target.closest('g.wz-layer');
+    if (!g) return;
+    demoLayer = +g.dataset.layer;
+    renderNet();
+  });
 
   $('wzFinish').onclick = () => {
     App.applyGuided({ dim: +choice.dim, problem: choice.problem, data: choice.data, network: choice.network });
@@ -411,6 +487,7 @@
     to.classList.add(forward ? 'enter-right' : 'enter-left');
     void to.offsetWidth;                                   // commit the start position before animating
     to.classList.remove('enter-right', 'enter-left');
+    to.querySelectorAll('.wz-card').forEach((c, i) => c.style.setProperty('--i', Math.min(i, 8)));
     to.classList.add('active');
     setTimeout(() => from.classList.remove('leave-left', 'leave-right'), SLIDE_MS);
     renderStepBar();
