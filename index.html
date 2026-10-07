@@ -46,6 +46,29 @@
   #modelStrip { display: flex; align-items: center; gap: 14px; padding: 8px 12px; border-top: 1px solid var(--line); background: var(--panel); }
   .ms-layers { flex: 1; display: flex; align-items: center; gap: 8px; min-width: 0; }
   .ms-layers input[type=range] { flex: 1; min-width: 80px; }
+  /* the network as a path: Input ▸ [W | σ] ▸ ... ▸ Output */
+  .pipe { position: relative; flex: 1; display: flex; align-items: center; justify-content: safe center; gap: 4px; min-width: 0; overflow-x: auto; padding: 6px 2px 10px;
+    cursor: ew-resize; user-select: none; scrollbar-width: none; }
+  .pipe::-webkit-scrollbar { display: none; }
+  .pipe .pn { padding: 4px 9px; border-radius: 6px; font-size: 12px; white-space: nowrap; transition: background 0.15s, border-color 0.15s; }
+  .pipe .pn.io { border-radius: 14px; color: var(--muted); }
+  .pipe .pb { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 8px; background: var(--panel2); padding: 2px; gap: 2px; }
+  .pipe .pb .pn { border: none; background: none; }
+  .pipe .pb .pn.w { font-weight: 650; }
+  .pipe .pb .pn.s { color: var(--muted); font-family: ui-monospace, monospace; font-size: 11px; }
+  .pipe .pn:hover { background: rgba(88, 166, 255, 0.12); }
+  .pipe .pn.now { background: var(--accent2); color: var(--text); }
+  .pipe .pi { border: none; background: none; color: var(--muted); padding: 2px 5px; font-size: 12px; }
+  .pipe .pi:hover { color: var(--accent); }
+  .pipe .pa { color: var(--line); font-size: 11px; }
+  .pipe .pm { display: inline-flex; gap: 2px; margin-left: 8px; }
+  .pipe .pm button { padding: 2px 8px; }
+  .pipe .marker { position: absolute; left: -4px; bottom: 1px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent);
+    box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.25); pointer-events: none; }
+  button.mini { padding: 4px 7px; }
+  .spark { display: inline-flex; flex-direction: column; align-items: center; gap: 0; }
+  #lossSpark { width: 90px; height: 20px; display: block; }
+  #lossVal { font-size: 10px; font-variant-numeric: tabular-nums; }
   .ms-train { display: flex; align-items: center; gap: 8px; padding-left: 14px; border-left: 1px solid var(--line); }
   #drawerBtn.on { background: var(--panel2); border-color: var(--accent); }
   #drawer { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); max-height: 46vh; border-top: 1px solid var(--line);
@@ -350,9 +373,9 @@
   <div id="helpPanel" class="hidden">
     <div class="help-title">Quick guide</div>
     <ol>
-      <li><b>Look:</b> press ▶ in the strip at the bottom — objects and the grid go through every layer (linear step, then activation).</li>
+      <li><b>Look:</b> the strip at the bottom is the network: Input ▸ W₁ | tanh ▸ … ▸ Output. Press ▶, click a step, or drag along the strip — objects and the grid go through every layer (linear step, then activation).</li>
       <li><b>Draw:</b> <b>＋ Objects</b> (bottom left) — pick a tool, draw on the view, or add a ready-made shape.</li>
-      <li><b>Inspect:</b> <b>Layer ⓘ</b>, or open <b>◫ Network</b> and click a layer — weights, activation and history. Double-click a weight to change it.</li>
+      <li><b>Inspect:</b> ⓘ next to a layer in the strip — weights, activation and history. Double-click a weight to change it. <b>◫</b> shows the neuron diagram.</li>
       <li><b>Train:</b> <b>Model ▲</b> opens network, goal and training settings; pick a task, press <b>★ Recommended</b>, then <b>▶ Train</b>.</li>
       <li><b>More:</b> <b>View ▾</b> for overlays, <b>Analysis</b> for loss and diagnostics, <b>Experiments</b> for what a network cannot do.</li>
     </ol>
@@ -631,16 +654,17 @@
     </div>
     <div id="modelStrip">
       <div class="ms-layers">
-        <button id="netToggle" data-tip="Show / hide the network diagram: neurons, weights (gold +, violet −) and the values at the probe point. Click a layer to inspect it.">◫ Network</button>
         <button id="play" data-tip="Animate through the layers (Space).">▶</button>
-        <button id="stepBack" data-tip="Previous sub-step (←).">⏮</button>
-        <button id="stepFwd" data-tip="Next sub-step: linear, then activation (→).">⏭</button>
-        <input id="stage" type="range" min="0" max="1" step="0.001" data-tip="Show the objects after layer k: each layer is split into the linear step and the activation step.">
-        <span id="ticks"></span>
-        <button id="inspBtn" data-sheet="inspector" data-tip="Weights, activation and history of one layer.">Layer ⓘ</button>
+        <div id="pipe" class="pipe" data-tip="The network as the path a point travels. Click a step to go there, drag to scrub, ⓘ inspects a layer."></div>
+        <button id="stepBack" class="mini" data-tip="Previous sub-step (←).">⏮</button>
+        <button id="stepFwd" class="mini" data-tip="Next sub-step: linear, then activation (→).">⏭</button>
+        <button id="netToggle" class="mini" data-tip="Show / hide the neuron diagram: neurons, weights (gold +, violet −) and the values at the probe point. Click a layer to inspect it.">◫</button>
+        <input id="stage" class="hidden" type="range" min="0" max="1" step="0.001">
+        <span id="ticks" class="hidden"></span>
       </div>
       <div class="ms-train">
         <button id="trainPlay" class="primary" data-tip="Start / pause training (key T).">▶ Train</button>
+        <span class="spark" data-tip="Loss of the last training steps (log scale). Full chart: Analysis."><canvas id="lossSpark"></canvas><span id="lossVal" class="tag"></span></span>
         <button id="drawerBtn" data-tip="Network, goal and training settings.">Model ▲</button>
       </div>
     </div>
@@ -761,6 +785,7 @@
 <script src="src/ui.js"></script>
 <script src="src/minis.js"></script>
 <script src="src/shell.js"></script>
+<script src="src/strip.js"></script>
 <script src="src/wizard.js"></script>
 </body>
 </html>

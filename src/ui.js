@@ -696,6 +696,13 @@
   const ease = (x) => x * x * (3 - 2 * x);
   let anim = null;  // { from, to, start, dur }
 
+  /** Jump to a (fractional) stage, e.g. while dragging along the model strip. */
+  function scrubTo(v) {
+    if (!traces) computeTraces();
+    anim = null; playing = false;
+    t = Math.max(0, Math.min(traces.nStages - 1, v));
+  }
+
   function animateTo(goal, dur = 650) {
     if (!traces) computeTraces();
     goal = Math.max(0, Math.min(traces.nStages - 1, goal));
@@ -1951,7 +1958,8 @@
     window.__app = { get S() { return S; }, get net() { return net; }, get trainer() { return trainer; }, setDim, importState,
       get t() { return t; }, set t(v) { t = v; }, setTool, finishDrawing, get traces() { return traces; },
       serializeState, get training() { return training; }, set training(v) { training = v; }, viz2,
-      selectLayer, get inspect() { return inspect; }, get history() { return history; }, applyGuided, recommendedArch, initFor };
+      selectLayer, get inspect() { return inspect; }, get history() { return history; }, applyGuided, recommendedArch, initFor,
+      animateTo, stageName, scrubTo, get playing() { return playing; } };
   }
 
   init();
