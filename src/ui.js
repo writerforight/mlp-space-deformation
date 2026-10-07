@@ -2139,6 +2139,7 @@
       catch (err) { alert('3D view needs WebGL: ' + err.message); return setDim(2); }
     }
     if (viz3) viz3.resize();
+    if (d === 2) viz2.resize();      // the view may have changed size (drawer, panels) while the 2D canvas was hidden
     rebuildNet();
     addExamples();
     syncControls();
@@ -2186,6 +2187,7 @@
       $('c2d').classList.toggle('hidden', S.dim !== 2);
       $('c3d').classList.toggle('hidden', S.dim !== 3);
       if (S.dim === 3 && !viz3) { viz3 = new Viz3D($('c3d')); bind3DMouse(); }
+      if (S.dim === 2) viz2.resize(); else if (viz3) viz3.resize();
     }
     net = null;
     rebuildNet(false, j.weights ? Float64Array.from(j.weights) : null);

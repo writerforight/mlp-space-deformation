@@ -30,6 +30,8 @@
 
     resize() {
       const r = this.canvas.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+      // a hidden canvas (3D mode) measures 0×0: keep the last real size instead of shrinking to nothing
+      if (r.width < 1 || r.height < 1) return;
       this.w = Math.max(10, r.width); this.h = Math.max(10, r.height); this.dpr = dpr;
       this.canvas.width = Math.round(this.w * dpr);
       this.canvas.height = Math.round(this.h * dpr);

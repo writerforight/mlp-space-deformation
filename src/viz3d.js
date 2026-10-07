@@ -44,6 +44,7 @@
 
     resize() {
       const r = this.container.getBoundingClientRect();
+      if (r.width < 1 || r.height < 1) return;            // hidden (2D mode): keep the last real size
       this.w = Math.max(10, r.width); this.h = Math.max(10, r.height);
       this.renderer.setSize(this.w, this.h, false);
       this.renderer.domElement.style.width = '100%';
