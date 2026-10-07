@@ -1633,7 +1633,8 @@
     setDim(g.dim);
     const T = S.train, d = g.data || {};
     T.target = g.problem;
-    if (g.problem === 'classify') Object.assign(T, { dataset: d.dataset, nData: d.n, noise: d.noise, dataSeed: d.seed || 0 });
+    if (g.problem === 'classify' || g.problem === 'goals') Object.assign(T, { dataset: d.dataset, nData: d.n, noise: d.noise, dataSeed: d.seed || 0 });
+    if (g.problem === 'goals') T.goals = defaultGoals();
     else if (g.problem === 'transform') Object.assign(T, { transform: d.map, amount: d.amount });
     else if (g.problem === 'morph') T.morph = d.pair;
     Object.assign(T, { optimizer: 'adam', lr: 0.01, batch: 32, stepsPerFrame: 10, redrawEvery: 10, mode: 'joint', method: 'none' });
@@ -2606,6 +2607,7 @@
 
   function setupHelp() {
     $('helpBtn').onclick = (e) => { e.stopPropagation(); $('helpPanel').classList.toggle('hidden'); };
+    $('tourBtn').onclick = (e) => { e.stopPropagation(); $('helpPanel').classList.add('hidden'); if (window.Tour) window.Tour.start(); };
     document.addEventListener('click', (e) => { if (!e.target.closest('#helpPanel')) $('helpPanel').classList.add('hidden'); });
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape') $('helpPanel').classList.add('hidden'); });
   }
@@ -2617,7 +2619,7 @@
       }
       const tag = (e.target.tagName || '').toLowerCase();
       if (tag === 'input' || tag === 'select' || tag === 'textarea' || e.ctrlKey || e.metaKey || e.altKey) return;
-      if (document.body.classList.contains('wizard-open')) return;
+      if (document.body.classList.contains('wizard-open') || document.body.classList.contains('tour-open')) return;
       if (e.key === ' ') { e.preventDefault(); $('play').click(); }
       else if (e.key === 'ArrowRight') { e.preventDefault(); $('stepFwd').click(); }
       else if (e.key === 'ArrowLeft') { e.preventDefault(); $('stepBack').click(); }

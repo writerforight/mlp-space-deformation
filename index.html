@@ -82,6 +82,20 @@
   .ex-vec span[title] { cursor: help; }
   .ex-op { color: var(--muted); font-size: 13px; white-space: nowrap; display: flex; flex-direction: column; align-items: center; }
   .ex-op small { font-size: 10px; }
+  /* tour */
+  #tour { position: fixed; inset: 0; z-index: 70; pointer-events: none; }
+  #tour .tour-spot { position: fixed; border-radius: 10px; box-shadow: 0 0 0 9999px rgba(1, 4, 9, 0.62); outline: 2px solid var(--accent);
+    transition: all 0.35s cubic-bezier(0.22, 0.61, 0.36, 1); pointer-events: none; }
+  #tour .tour-card { position: fixed; pointer-events: auto; background: var(--panel); border: 1px solid var(--accent); border-radius: 12px;
+    padding: 12px 14px; box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5); transition: left 0.35s cubic-bezier(0.22, 0.61, 0.36, 1), top 0.35s cubic-bezier(0.22, 0.61, 0.36, 1); }
+  #tour .tour-card.in { animation: wzRise 0.3s ease backwards; }
+  .tour-count { font-size: 11px; color: var(--muted); }
+  .tour-title { font-size: 15px; font-weight: 650; margin: 2px 0 6px; }
+  .tour-text { font-size: 13px; color: var(--text); line-height: 1.5; }
+  .tour-btns { display: flex; align-items: center; gap: 6px; margin-top: 12px; }
+  .tour-btns .sp { flex: 1; }
+  .tour-skip { background: none; border: none; color: var(--muted); padding-left: 0; }
+  .wz-tourpick { display: flex; align-items: center; gap: 8px; color: var(--muted); margin-top: 14px; font-size: 13px; }
   /* goals */
   .gcard { border: 1px solid var(--line); border-radius: 8px; padding: 4px 10px 8px; margin: 6px 0; background: var(--panel2); }
   .ghead { display: flex; align-items: center; gap: 8px; margin: 2px 0 2px; }
@@ -352,6 +366,7 @@
   .wz-cards { display: grid; gap: 20px; width: 100%; max-width: 1060px; justify-content: center;
     grid-template-columns: repeat(auto-fit, minmax(200px, 240px)); }
   .wz-cards.two { grid-template-columns: repeat(auto-fit, minmax(240px, 300px)); }
+  .wz-cards.five { grid-template-columns: repeat(auto-fit, minmax(170px, 200px)); max-width: 1120px; }
   .wz-card { display: flex; flex-direction: column; gap: 10px; padding: 14px; text-align: left; white-space: normal;
     background: var(--panel); border: 1px solid var(--line); border-radius: 12px; cursor: pointer;
     transition: transform 0.15s ease, border-color 0.15s ease; }
@@ -456,6 +471,7 @@
         With <i>my own goals</i> you mix goals (class → point, separate classes, object → point, object stays) and drag their targets at the output.</li>
       <li><b>More:</b> <b>View ▾</b> for overlays, <b>Analysis</b> for loss and diagnostics, <b>Experiments</b> for what a network cannot do.</li>
     </ol>
+    <div class="btns"><button id="tourBtn" class="primary">Take the tour</button></div>
     <div class="help-title">Keyboard</div>
     <div class="kv"><span><kbd>Space</kbd></span><span>play / pause the layer animation</span>
       <span><kbd>←</kbd> <kbd>→</kbd></span><span>previous / next sub-step</span>
@@ -825,8 +841,9 @@
     <section class="wz-screen" data-step="problem">
       <h2>What should the network do?</h2>
       <p class="lead">Each card shows what happens in that problem.</p>
-      <div class="wz-cards">
+      <div class="wz-cards five">
       <button class="wz-card" data-key="problem" data-value="classify"><div class="pv live"><canvas></canvas></div><div class="t">Classification</div><div class="d" data-d2="Pull two classes apart so a straight line separates them." data-d3="Pull two classes apart so a flat plane separates them.">Pull two classes apart so a straight line separates them.</div></button>
+      <button class="wz-card" data-key="problem" data-value="goals"><div class="pv live"><canvas></canvas></div><div class="t">Send classes anywhere</div><div class="d">Blue to a point A, red to a point B — you choose A and B, and can drag them while it trains.</div></button>
       <button class="wz-card" data-key="problem" data-value="transform"><div class="pv live"><canvas></canvas></div><div class="t">Copy a linear map</div><div class="d">Learn a rotation, shear or scaling.</div></button>
       <button class="wz-card" data-key="problem" data-value="morph"><div class="pv live"><canvas></canvas></div><div class="t">Shape to shape</div><div class="d">Turn one shape into another.</div></button>
       <button class="wz-card" data-key="problem" data-value="none"><div class="pv live"><canvas></canvas></div><div class="t">Just look</div><div class="d">No training: see how a random network bends space.</div></button>
@@ -891,6 +908,7 @@
         <ul class="warnlist" id="wzNetNotes"></ul>
       </div>
       <div class="wz-actions"><button id="wzFinish" class="primary">Open the workspace →</button></div>
+      <label class="wz-tourpick"><input id="wzTour" type="checkbox"> Show me around the workspace (a short tour)</label>
     </section>
   </div>
 </div>
@@ -905,6 +923,7 @@
 <script src="src/minis.js"></script>
 <script src="src/shell.js"></script>
 <script src="src/strip.js"></script>
+<script src="src/tour.js"></script>
 <script src="src/wizard.js"></script>
 </body>
 </html>

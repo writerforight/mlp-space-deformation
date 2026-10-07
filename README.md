@@ -21,7 +21,8 @@ The page opens with a short guided start: pick **2D or 3D**, then a **problem** 
 linear map, shape to shape, or just look), then the **data** (each card opens with its settings: number
 of points, noise, map strength), then the **network**, drawn as its actual weight matrices with the
 starting weights. Every card plays a small preview computed by a tiny network trained in the page.
-*Open the workspace* applies all choices; **I know how to use it** (or a link ending in `#workspace`)
+The problems include **Send classes anywhere** (blue to a point A, red to a point B, both draggable later).
+*Open the workspace* applies all choices (and, if ticked, starts a short **tour** of the workspace — also under **?** → *Take the tour*); **I know how to use it** (or a link ending in `#workspace`)
 goes straight to the full workspace, and **Guided start** in the header opens the guide again.
 Code: `src/wizard.js` (flow) and `src/minis.js` (previews).
 

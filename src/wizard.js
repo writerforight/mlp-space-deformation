@@ -105,7 +105,7 @@
 
   /** Cards for the current problem: [{ group, id, name, blurb, opts }]. */
   function dataOptions(problem, dim) {
-    if (problem === 'classify') {
+    if (problem === 'classify' || problem === 'goals') {
       return Minis.DATASETS.filter((d) => d.dims.includes(dim)).map((d) => ({ group: d.group, id: d.id, name: d.name,
         blurb: d.blurb, info: d, opts: { dataset: d.id, n: 400, noise: 0.08, seed: 0 } }));
     }
@@ -121,6 +121,7 @@
 
   const TEXT = {
     classify: ['Which data?', 'Blue and red are the two classes. Open a card to adjust it.'],
+    goals: ['Which data?', 'Blue points will be sent to A, red points to B. Open a card to adjust the data.'],
     transform: ['Which linear map?', 'The network learns to send every point x to A·x. Open a card to set the amount.'],
     morph: ['Which shapes?', 'Point i of the first shape should land on point i of the second.'],
   };
@@ -170,11 +171,12 @@
     $('wzDetTitle').textContent = o.name;
     $('wzDetBlurb').textContent = o.blurb || '';
     let html = '';
-    if (problem === 'classify') {
+    if (problem === 'classify' || problem === 'goals') {
       html += slider('wzN', 'Points', 100, 800, 50, detail.opts.n, (v) => v, 'How many points the network trains on.');
       if (o.info.noise) html += slider('wzNoise', 'Noise', 0, 0.3, 0.01, detail.opts.noise, (v) => (+v).toFixed(2), 'How far points scatter from the clean shape.');
       else if (o.info.exact) html += '<div class="note">Exact shape: no noise, the points lie exactly on it.</div>';
       if (!o.info.exact) html += '<div class="btns"><button id="wzResample">New random sample</button></div>';
+      if (problem === 'goals') html += '<div class="note">A starts at (1, 0) and B at (−1, 0). In the workspace, go to Output and drag them — or add more goals.</div>';
     } else if (problem === 'transform') {
       const m = o.info, fmt = (v) => `${(+v).toFixed(2)}${m.unit ? ` ${m.unit}` : ''}`;
       html += slider('wzAmount', m.id === 'rotation' ? 'Angle' : m.id === 'shear' ? 'Shear' : 'Stretch', m.min, m.max, 0.05, detail.opts.amount, fmt);
@@ -384,7 +386,7 @@
       out.push(`Hidden width ${w} is smaller than the input dimension ${d}: the first matrix flattens space, and points that land on the same spot can never be told apart again.`);
     }
     const enclosed = { 2: ['circles', 'rings', 'shape:diskInRing'], 3: ['circles', 'rings', 'linked', 'shape:linkedRings', 'shape:nestedSpheres'] };
-    if (choice.problem === 'classify' && enclosed[d].includes(data.dataset) && w <= d) {
+    if ((choice.problem === 'classify' || choice.problem === 'goals') && enclosed[d].includes(data.dataset) && w <= d) {
       out.push(`With width ${w} every layer can at most bend ${d}D space without tearing it, so one class stays trapped around the other. Width ${d === 2 ? '3' : '4'} or more gives the network room to lift it out.`);
     }
     const glue = ['circle>figure8', 'twoCircles>oneCircleTwice', 'torus>torusOnSphere'];
@@ -460,9 +462,12 @@
     renderNet();
   });
 
+  $('wzTour').checked = window.Tour ? window.Tour.wanted() : false;
+  $('wzTour').onchange = () => window.Tour && window.Tour.setWanted($('wzTour').checked);
   $('wzFinish').onclick = () => {
     App.applyGuided({ dim: +choice.dim, problem: choice.problem, data: choice.data, network: choice.network });
     close();
+    if ($('wzTour').checked && window.Tour) setTimeout(() => window.Tour.start(), 650);   // after the guide has faded out
   };
 
   function renderStepBar() {
@@ -563,8 +568,8 @@
     }
   });
 
-  ['classify', 'transform', 'morph', 'none'].forEach((p) => want(`${p}/2`));
-  ['classify', 'transform', 'morph'].forEach((p) => want(`${p}/3`));
+  ['classify', 'goals', 'transform', 'morph', 'none'].forEach((p) => want(`${p}/2`));
+  ['classify', 'goals', 'transform', 'morph'].forEach((p) => want(`${p}/3`));
 
   window.Wizard = { choice, show, close, open, scenes };
   if (location.hash === '#workspace') root.classList.add('hidden');

@@ -77,6 +77,23 @@
       };
     }
 
+    if (problem === 'goals') {
+      // my own goals: every blue point to A, every red point to B (squared distance)
+      const data = NN.makeDataset(dim === 2 ? 'moons' : 'circles', 240, dim, rng, 0.06);
+      const A = dim === 2 ? [1, 0.6] : [1, 0.6, 0], B = dim === 2 ? [-1, -0.6] : [-1, -0.6, 0];
+      const net = buildNet(dim, 3, dim === 2 ? 4 : 6, 11, true);
+      yield* train(net, data.map((q) => ({ x: q.x, y: Float64Array.from(q.y === 0 ? A : B) })), 'mse', 1200, 3);
+      const mark = (p, c) => ({ kind: 'dots', from: [Float64Array.from(p)], to: [Float64Array.from(p)], color: CLASS[c], alpha: 1, size: 6, showAt: 'out' });
+      return {
+        items: [...gridItems(grid, net, gridStyle),
+          ...[0, 1].map((c) => {
+            const pts = data.filter((q) => q.y === c).map((q) => q.x);
+            return { kind: 'dots', from: pts, to: pts.map((p) => net.predict(p)), color: CLASS[c], alpha: 1 };
+          }), mark(A, 0), mark(B, 1)],
+        ok: 1, fitTo: 'objects',
+      };
+    }
+
     if (problem === 'transform') {
       // a rotation by 50 degrees and a mild shear, learned from samples
       const A = NN.targetMatrix('rotation', dim, (50 * Math.PI) / 180);
@@ -207,7 +224,7 @@
    * The classify scene stands still (from = to); transform and morph animate identity -> target.
    */
   function dataScene(problem, dim, opts) {
-    if (problem === 'classify') {
+    if (problem === 'classify' || problem === 'goals') {
       const ds = opts.dataset;
       let samples;
       if (ds.startsWith('shape:')) {
