@@ -69,7 +69,7 @@
       el.addEventListener('pointerdown', (e) => {
         if (!this.allowRotate(e)) return;
         drag = { x: e.clientX, y: e.clientY, pan: e.button === 2 || e.shiftKey };
-        el.setPointerCapture(e.pointerId);
+        try { el.setPointerCapture(e.pointerId); } catch (err) { /* no capturable pointer (synthetic event) */ }
       });
       el.addEventListener('pointermove', (e) => {
         if (!drag) return;
@@ -119,11 +119,20 @@
     }
 
     /** Intersection of a pixel ray with the plane z = 0 (the "floor" pins are placed on). */
-    pickPlaneZ0(px, py) {
+    pickPlaneZ0(px, py) { return this.pickPlaneZ(px, py, 0); }
+
+    /** Intersection of a pixel ray with the horizontal plane z = z0 (used to drag a goal's target). */
+    pickPlaneZ(px, py, z0) {
       const { origin, dir } = this.ray(px, py);
       if (Math.abs(dir.z) < 1e-9) return null;
-      const t = -origin.z / dir.z;
+      const t = (z0 - origin.z) / dir.z;
       return t > 0 ? origin.addScaledVector(dir, t).toArray() : null;
+    }
+
+    /** Canvas pixel of a world point (for hit tests). */
+    toScreen(p) {
+      const v = new THREE.Vector3(p[0], p[1], p[2]).project(this.camera);
+      return [(v.x + 1) / 2 * this.w, (1 - v.y) / 2 * this.h];
     }
 
     /** Replace the drawn items; objects are created once per id and updated in place afterwards. */

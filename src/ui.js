@@ -1279,15 +1279,33 @@
     hintTimer = setTimeout(() => { $('hint').style.color = ''; renderToolbar(); }, 4500);
   }
 
+  /** 3D: a goal's target point A under the pointer (output step only), or null. */
+  function goalAt3(px, py) {
+    if (!isGoals() || S.dim !== 3 || !traces || t < traces.nStages - 1 - 1e-6) return null;
+    for (const g of S.train.goals) {
+      if (!g.target) continue;
+      const q = viz3.toScreen(g.target);
+      if (Math.hypot(q[0] - px, q[1] - py) < 14) return g;
+    }
+    return null;
+  }
+
   function bind3DMouse() {
     const el = viz3.renderer.domElement;
-    viz3.allowRotate = (e) => tool === 'pan' || e.button === 2;
-    viz3.onUserZoom = userMovedView;
     const pos = (e) => { const r = el.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+    // grabbing a goal's target must not also rotate the camera (viz3 asks this before it starts a drag)
+    viz3.allowRotate = (e) => !(e.button === 0 && tool === 'pan' && goalAt3(...pos(e))) && (tool === 'pan' || e.button === 2);
+    viz3.onUserZoom = userMovedView;
+    let drag3 = null;           // { g, z } while a goal's target is dragged on its horizontal plane
     el.addEventListener('pointerdown', (e) => {
+      if (e.button === 0 && tool === 'pan') {
+        const g = goalAt3(...pos(e));
+        if (g) { drag3 = { g, z: g.target[2] }; try { el.setPointerCapture(e.pointerId); } catch (err) { /* no capturable pointer (synthetic event) */ } }
+        return;
+      }
       if (tool === 'pan' || e.button !== 0) return;
       const [px, py] = pos(e);
-      el.setPointerCapture(e.pointerId);
+      try { el.setPointerCapture(e.pointerId); } catch (err) { /* no capturable pointer (synthetic event) */ }
       if (tool === 'sphereDraw') {
         t = 0; anim = null;
         const p = viz3.pickSphere(px, py, S.sphere.c, S.sphere.r);
@@ -1301,12 +1319,23 @@
       }
     });
     el.addEventListener('pointermove', (e) => {
+      if (drag3) {
+        const p = viz3.pickPlaneZ(...pos(e), drag3.z);
+        if (p) {
+          drag3.g.target[0] = +p[0].toFixed(2); drag3.g.target[1] = +p[1].toFixed(2);
+          refreshGoalSamples(drag3.g);
+          const card = document.querySelector(`.gcard[data-goal="${drag3.g.id}"]`);
+          if (card) [0, 1].forEach((k) => { const s2 = card.querySelector(`[data-k="t${k}"]`); if (s2) { s2.value = drag3.g.target[k]; s2.parentElement.querySelector('.val').textContent = drag3.g.target[k].toFixed(2); } });
+          lastSig = '';                                       // redraw the marker
+        }
+        return;
+      }
       if (!drawing) return;
       const [px, py] = pos(e);
       if (drawing.type === 'sphereDraw') { const p = viz3.pickSphere(px, py, S.sphere.c, S.sphere.r); if (p) drawing.pts.push(p); }
       else if (drawing.type === 'pin') { const p = viz3.pickPlaneZ0(px, py); if (p) drawing.y = p; }
     });
-    el.addEventListener('pointerup', finishDrawing);
+    el.addEventListener('pointerup', () => { drag3 = null; finishDrawing(); });
   }
 
   // ===========================================================================
