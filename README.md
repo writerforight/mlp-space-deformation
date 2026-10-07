@@ -32,10 +32,11 @@ Code: `src/wizard.js` (flow) and `src/minis.js` (previews).
 One big view; everything else opens on demand, and one panel at a time (✕, Esc or a click outside closes it).
 
 - **The strip at the bottom is the network**: `Input ▸ [W₁ | tanh] ▸ … ▸ Output`. Click a step to go there,
-  drag along the strip to scrub, ⓘ inspects a layer, − / ＋ change the depth. ▶ Train sits on the right,
-  next to the **training timeline**: the loss of the whole run, which you can drag like a video to see
-  the network at any earlier step (⏵ replays it, ● live returns; training from an old step continues from
-  there). **Model ▲** opens network | goal | training settings.
+  drag along the strip to scrub, ⓘ inspects a layer, − / ＋ change the depth. ▶ Train sits on the right;
+  **Model ▲** opens network | goal | training settings.
+- **Training timeline**: once a network has trained, a video-style bar on the view shows the loss of the
+  whole run. Drag on it to see the network at any earlier step, ⏵ replays the training, ● live returns;
+  training from an old step continues from there.
 - **Tools**: click the active tool again, the tool badge on the view, or Esc to go back to panning; the
   Objects panel stays open while you draw.
 - **＋ Objects** (bottom left): ready-made shapes, drawing by hand, and a card per object (colour, size,

@@ -4,8 +4,9 @@
 
    Every half of a block is one stage of the animation (W = the linear step, the right half = the
    activation).  Click a stage to go there, drag along the strip to scrub, ⓘ opens the layer inspector.
-   A marker shows where the view is right now, also between stages.  Next to ▶ Train the loss of the whole
-   run doubles as a training timeline: drag on it to see the network at an earlier step, ⏵ replays it.
+   A marker shows where the view is right now, also between stages.  Once there is training, a video-style
+   bar on the view shows the loss of the whole run: drag on it to see the network at an earlier step,
+   ⏵ replays it, ● live returns.
 */
 (function () {
   'use strict';
@@ -95,7 +96,9 @@
     if (key === sparkKey) return;
     sparkKey = key;
     $('liveBtn').classList.toggle('hidden', vi === null);
-    $('replayBtn').disabled = steps.length < 2;
+    const show = steps.length >= 2 && hist.length >= 2;            // the bar appears once there is training to watch
+    $('timeline').classList.toggle('hidden', !show);
+    document.body.classList.toggle('has-timeline', show);
     const w = spark.clientWidth, h = spark.clientHeight, dpr = window.devicePixelRatio || 1;
     if (!w) return;
     spark.width = Math.round(w * dpr); spark.height = Math.round(h * dpr);
