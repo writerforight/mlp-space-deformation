@@ -25,6 +25,8 @@ starting weights. Every card plays a small preview computed by a tiny network tr
 goes straight to the full workspace, and **Guided start** in the header opens the guide again.
 Code: `src/wizard.js` (flow) and `src/minis.js` (previews).
 
+![Guided start, network step: the network as its weight matrices, and one layer step by step](docs/screenshot-guide.png)
+
 ## The workspace
 
 One big view; everything else opens on demand, and one panel at a time (✕, Esc or a click outside closes it).
@@ -45,38 +47,44 @@ One big view; everything else opens on demand, and one panel at a time (✕, Esc
 
 ## Things to try
 
-1. **Watch a network bend space.** Press ▶ under the view: the grid, the unit circle and the example
-   objects go through each layer — first the linear map, then the activation.
-2. **Look inside a layer.** Press **◫ Network** under the view and click a layer in the diagram. The
-   *Layer inspector* on the right shows its weight matrix `W` and bias `b` as a heatmap (gold +, violet −; blue and red always mean the two classes),
-   its activation function with the derivative and a histogram of where the points actually land, and
-   how every weight moved during training. Double-click a weight, type a new value and watch the
+1. **Watch a network bend space.** Press ▶ at the left of the strip (or Space): the grid, the unit circle
+   and the example objects go through each layer — first the linear map, then the activation. Click a
+   step in the strip to jump there, or drag along it.
+2. **Look inside a layer.** Click ⓘ next to a layer in the strip. The *Layer inspector* shows its weight
+   matrix `W` and bias `b` as a heatmap (gold +, violet −; blue and red always mean the two classes), its
+   activation function with the derivative and a histogram of where the points actually land, and how
+   every weight moved during training. Double-click a weight, type a new value and watch the
    deformation change.
-3. **Send each class to a point.** Training → Task *send each class to a point*, Data *spirals*, press
-   **★ Recommended**, then **▶ Train**. Blue points are pulled to (1, 0), red points to (−1, 0); at the
-   output the whole plane collapses onto the segment between them.
-4. **Topology experiments: what a network can and cannot do.** The *Topology experiments* table shows for
-   every experiment whether it works at width *d* and with one extra dimension. Click one (e.g. 3D →
-   *Ball out of the shell*), run **Width 3 — expected: fails**, then **Width 4 — expected: works**; the
-   result line under the buttons says whether your run solved it. Watch "worst point off by" —
-   it is measured on a 50× finer copy of the shape, because the network otherwise cheats by stretching
-   the piece of a curve between two training points around the obstacle.
-5. **Catastrophic forgetting.** Task *pinned points*, drag a few pins, Mode *sequential*, train with
-   anti-forgetting *none*, then with *replay*, *OGD* or *EWC*, and compare the Forgetting table.
+3. **Send each class wherever you want.** Model ▲ → Task *my own goals*, Data *spirals*, press
+   **★ Recommended**, then **▶ Train**. Blue points are pulled to A, red points to B; jump to Output and
+   drag A or B while it trains. Add *Object stays* to keep a shape in place at the same time.
+4. **Look into a wide layer.** With width 4 or more in 2D, go to a hidden step and right-drag the view:
+   the third principal direction becomes depth, and you can see how the layer lifts one class over the
+   other. The class background (View ▾) says how often its 2D slice agrees with the network.
+5. **Topology experiments: what a network can and cannot do.** *Experiments* (top right) shows for every
+   experiment whether it works at width *d* and with one extra dimension. Click one (e.g. 3D → *Ball out
+   of the shell*), run **Width 3 — expected: fails**, then **Width 4 — expected: works**; the result line
+   says whether your run solved it. Watch "worst point off by" — it is measured on a 50× finer copy of
+   the shape, because the network otherwise cheats by stretching the piece of a curve between two
+   training points around the obstacle.
+6. **Catastrophic forgetting.** Task *pinned points*, drag a few pins with the Pin tool (＋ Objects),
+   Model ▲ → Continual learning → Mode *sequential*, train with anti-forgetting *none*, then with
+   *replay*, *OGD* or *EWC*, and compare the Forgetting table under *Analysis*.
 
-![Forward view: a tanh network half-way through layer 2, with Jacobian ellipses](docs/screenshot-2d.png)
-![Training: where the network sends each input (background), loss curve and gradient interference](docs/screenshot-train.png)
+![Forward view: a tanh network half-way through layer 2, with Jacobian ellipses; the strip at the bottom is the network](docs/screenshot-2d.png)
+![My own goals on the spirals: blue to A, red to B, at the output; the Model drawer shows network, goals with their losses, and training](docs/screenshot-train.png)
+![A wide hidden layer, tilted: the third principal direction as depth shows how the layer lifts one class over the other](docs/screenshot-tilt.png)
+![Layer inspector and neuron diagram; the class background of a wide stage is a 2D slice, and the legend says how often it agrees with the network](docs/screenshot-inspector.png)
 ![3D view](docs/screenshot-3d.png)
-![Network diagram and layer inspector: weights, activation with point histogram, weight history](docs/screenshot-inspector.png)
 
 ## What it shows
 
 - **Forward view.** Draw curves, circles, filled regions (2D) or spheres and curves on spheres (3D).
   Each object is sampled into 200–500 points connected in order, together with the reference grid,
-  the unit circle/sphere, the basis vectors and the origin. Move the stage slider to see the objects
-  after each layer — every layer is split into its **linear** step (`z = W a + b`) and its
+  the unit circle/sphere, the basis vectors and the origin. Click or drag along the strip to see the
+  objects after each layer — every layer is split into its **linear** step (`z = W a + b`) and its
   **activation** step (`a = σ(z)`), with a smooth morph in between.
-- **Network diagram and layer inspector.** A strip under the view draws the network: one column per
+- **Network diagram and layer inspector.** ◫ in the strip opens a diagram of the network: one column per
   layer, edges coloured and weighted by `W` (gold positive, violet negative), neurons filled by their value
   at the probe point. Click a layer to inspect it: `W`/`b` heatmap with the change since initialization
   under each cell, singular values, rank, `det W`, norms; the activation `σ(z)` and `σ′(z)` with a
@@ -93,6 +101,8 @@ One big view; everything else opens on demand, and one panel at a time (✕, Esc
     `(−1, 0[, 0])` (MSE). The clearest picture of classification: each class cloud is squashed onto its
     point and the region between the classes is stretched into a cliff — a tiny version of the
     "neural collapse" seen in large classifiers;
+  - **my own goals**: any mix of class → point (drag the point), separate the classes, object → point and
+    object stays, each with a weight;
   - **separate classes** with two output logits and cross-entropy;
   - **match a linear map** (rotation, shear, scaling) with MSE;
   - **pinned points**: drag from an input point to where its output should go.
@@ -114,9 +124,10 @@ One big view; everything else opens on demand, and one panel at a time (✕, Esc
 - **You stay in control.** Nothing changes your settings or the view on its own: zoom with the wheel,
   pan by dragging. One button, **★ Recommended**, aligns everything to settings that work well for the
   current task and data (layers, width, activations, initialization, optimizer) and fits the view.
-- **Interface.** Every panel is a collapsible section with a one-line summary in its header; the less
-  used options sit in sub-groups. Open/closed state is remembered. Keyboard: <kbd>Space</kbd> play/pause,
-  <kbd>←</kbd>/<kbd>→</kbd> step through the layers, <kbd>T</kbd> train; the **?** button shows a quick guide.
+- **Interface.** A guided start for first visits; then one big view with everything else on demand
+  (see *The workspace* above). The page only draws when something changes, so an idle tab costs almost
+  nothing. Keyboard: <kbd>Space</kbd> play/pause, <kbd>←</kbd>/<kbd>→</kbd> step through the layers,
+  <kbd>T</kbd> train, <kbd>Esc</kbd> closes a panel; the **?** button shows a quick guide.
 - **Share.** Export/import the full state (architecture, seed, weights, objects, pins, settings) as JSON.
 
 ## Run locally
@@ -146,7 +157,11 @@ src/nn.js       tensor/MLP module: forward, backprop, Jacobians, losses, SGD, Ad
 src/viz2d.js    Canvas renderer (pan/zoom) and small charts (loss, heatmap)
 src/viz3d.js    Three.js renderer with a minimal orbit camera and ray picking
 src/inspector.js network diagram and layer inspector (weight heatmap, activation, weight history)
-src/ui.js       state, controls, traces through the layers, interaction, training loop, panels
+src/ui.js       state, controls, traces through the layers, interaction, training loop, objects, goals
+src/shell.js    workspace layout: popovers, the right-hand sheet, the model drawer (one panel at a time)
+src/strip.js    the model strip: the network as the path a point travels, scrubbing, loss sparkline
+src/wizard.js   the guided start (dimension → problem → data → network)
+src/minis.js    the guided start's previews (tiny networks trained in the page) and the one-layer demo
 test/           node test of the math in nn.js
 ```
 
@@ -268,7 +283,10 @@ Training on task B after task A can raise A's loss again. The app measures
 
 Layers wider than the view dimension are drawn through their top two (or three) principal
 components. The axis signs are aligned with the previous stage so the animation does not flip, and the
-label shows how much of the variance the projection keeps.
+label shows how much of the variance the projection keeps. In 2D the third component can be shown as
+depth (right-drag to tilt): a class that a wide layer lifts over the other becomes visible. The class
+background of a wide stage is the rest of the network evaluated on the PCA plane through the points —
+a 2D slice — and the legend says on how many data points that slice agrees with the network.
 
 ## Author
 

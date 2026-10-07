@@ -1515,7 +1515,7 @@
    */
   /** [layers, width] that train well for a task and data set (shared with the guided start). */
   function recommendedArch(d, target, dataset) {
-    if (target === 'anchors' || target === 'classify') {
+    if (target === 'anchors' || target === 'classify' || target === 'goals') {   // goals: class data, sent to points
       return { blobs: [2, d], moons: [4, d], circles: [4, d === 3 ? 6 : 4], rings: [5, 6], xor: [3, 4], wave: [4, 6],
         spirals: [6, 6], checker: [6, 8], linked: [4, 4], custom: [5, 6] }[dataset] || (dataset.startsWith('shape:') ? [4, d + 1] : [4, 6]);
     }
