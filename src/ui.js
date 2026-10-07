@@ -1298,8 +1298,8 @@
   /** Pins with their input → target coordinates, each removable. */
   function renderPinList() {
     const box = $('pinList');
+    $('clearObjects').disabled = !S.objects.length && !S.pins.length;
     box.innerHTML = '';
-    $('clearPins').disabled = !S.pins.length;
     const f = (v) => '(' + Array.from(v).map((x) => x.toFixed(2)).join(', ') + ')';
     S.pins.forEach((p, i) => {
       const row = document.createElement('div');
@@ -1506,9 +1506,12 @@
       addObject({ type: 'sphere', closed: false, points: NN.fibonacciSphere(S.nPoints, S.sphere.c, S.sphere.r).map((p) => Array.from(p)) });
     };
     for (const id of ['sx', 'sy', 'sz', 'sr']) $(id).onchange = readSphereInputs;
-    $('clearObjects').onclick = () => { S.objects = []; renderObjList(); invalidate(); };
-    $('clearPins').onclick = () => { training = false; S.pins = []; onPinsChanged(); };
-    $('examples').onclick = addExamples;
+    $('clearObjects').onclick = () => {                     // one bin for everything placed in space: objects and pins
+      const hadPins = S.pins.length > 0;
+      S.objects = []; S.pins = [];
+      renderObjList(); invalidate();
+      if (hadPins) { training = false; onPinsChanged(); }
+    };
     $('exportBtn').onclick = exportState;
     $('recommendBtn').onclick = applyRecommended;
     $('importBtn').onclick = () => $('importFile').click();
@@ -1966,6 +1969,7 @@
 
   function renderObjList() {
     const box = $('objList');
+    $('clearObjects').disabled = !S.objects.length && !S.pins.length;
     if (!S.objects.length) { box.innerHTML = '<div class="note">No objects yet: add a shape above, or draw one.</div>'; return; }
     if (!S.objects.some((o) => o.id === selObj)) selObj = null;
     box.innerHTML = '<div class="ochips">' + S.objects.map((o) => `<button class="ochip${o.id === selObj ? ' on' : ''}${o.hidden ? ' off' : ''}" data-id="${o.id}">

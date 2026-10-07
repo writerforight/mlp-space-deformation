@@ -95,6 +95,10 @@
   #toolChip { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 5; border-radius: 16px; padding: 5px 12px;
     background: rgba(31, 111, 235, 0.25); border: 1px solid var(--accent); }
   #toolbar button.on:disabled { opacity: 1; cursor: default; }
+  button.danger { color: #ff6b6b; border-color: rgba(255, 107, 107, 0.55); }
+  button .ico { width: 14px; height: 14px; vertical-align: -2px; }
+  button.danger:hover { background: rgba(255, 107, 107, 0.12); border-color: #ff6b6b; }
+  button.danger:disabled { color: var(--muted); border-color: var(--line); background: none; }
   #lossSpark { cursor: ew-resize; }
   #liveBtn { color: #ff6b6b; border-color: #ff6b6b; }
   #timeline { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 5; width: min(640px, calc(100% - 280px));
@@ -448,7 +452,7 @@
       <!-- top right: how to look -->
       <div class="anchor tr">
         <button id="viewBtn" class="chip" data-pop="viewPop">View ▾</button>
-        <div id="viewPop" class="pop hidden" data-title="View">
+        <div id="viewPop" class="pop hidden" data-title="View" data-sticky="1">
           <div class="pop-head"><b>View</b><button class="x" data-close>✕</button></div>
           <div class="pop-body">
         <div class="group-label">Reference</div>
@@ -495,9 +499,7 @@
             <div class="group-label">Your objects <span class="tag">— click one to edit</span></div>
             <div id="objList"></div>
             <div id="pinList"></div>
-            <div class="btns"><button id="clearObjects" data-tip="Remove all drawn objects (curves, circles, regions, spheres). Pins stay.">Clear objects</button>
-          <button id="clearPins" data-tip="Remove all pinned points.">Clear pins</button>
-          <button id="examples" data-tip="Add a few example objects.">Add examples</button></div>
+            <div class="btns"><button id="clearObjects" class="danger" data-tip="Remove all objects and all pins."><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4h10M6.5 4V2.5h3V4M4.5 4l.7 9.5h5.6l.7-9.5M7 6.5v5M9 6.5v5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg> Clear all</button></div>
             <details class="sub" data-sec="obj-draw">
           <summary>Drawing settings</summary>
           <div class="row"><label data-tip="Total number of points per new object (not per unit length): each drawn or ready-made object is resampled to this many points, equally spaced along it and connected in order, so stretching and folding stay visible. A long curve gets the same number as a short one. Change it per object in its card.">Points</label>
