@@ -46,6 +46,23 @@
   #modelStrip { display: flex; align-items: center; gap: 14px; padding: 8px 12px; border-top: 1px solid var(--line); background: var(--panel); }
   .ms-layers { flex: 1; display: flex; align-items: center; gap: 8px; min-width: 0; }
   .ms-layers input[type=range] { flex: 1; min-width: 80px; }
+  /* objects */
+  #presetBtns button { padding: 3px 9px; }
+  .ochips { display: flex; flex-wrap: wrap; gap: 5px; margin: 4px 0 6px; }
+  .ochip { display: inline-flex; align-items: center; gap: 6px; border-radius: 14px; padding: 3px 10px; }
+  .ochip .dot, .olog-head .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+  .ochip.on { border-color: var(--accent); background: rgba(31, 111, 235, 0.18); }
+  .ochip.off { opacity: 0.5; }
+  .ocard { border: 1px solid var(--line); border-radius: 8px; padding: 4px 10px 6px; margin: 4px 0 8px; background: var(--panel2); animation: wzRise 0.2s ease backwards; }
+  .ocard .row > label:first-child { width: 64px; }
+  .ocard input[type=color] { width: 34px; height: 22px; padding: 0; border: 1px solid var(--line); border-radius: 4px; background: none; }
+  label.inline { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); margin-left: auto; }
+  .olog-head { display: flex; align-items: center; gap: 7px; margin: 8px 0 4px; }
+  .olog-sum { color: var(--text); }
+  table.olog td { vertical-align: middle; padding: 3px 4px; }
+  table.olog tr[data-s] { cursor: pointer; }
+  table.olog tr[data-s]:hover td { background: var(--panel2); }
+  canvas.othumb { width: 44px; height: 44px; display: block; background: var(--bg); border-radius: 4px; }
   /* the network as a path: Input ▸ [W | σ] ▸ ... ▸ Output */
   .pipe { position: relative; flex: 1; display: flex; align-items: center; justify-content: safe center; gap: 4px; min-width: 0; overflow-x: auto; padding: 6px 2px 10px;
     cursor: ew-resize; user-select: none; scrollbar-width: none; }
@@ -431,17 +448,20 @@
         <div id="objPop" class="pop up hidden">
           <div class="pop-head"><b>Objects</b><span class="sec-info" id="sumObjects"></span><button class="x" data-close>✕</button></div>
           <div class="pop-body">
-            <div class="group-label">Draw</div>
-            <div id="toolbar"></div>
-        <div class="note" id="toolNote"></div>
-        <div class="row"><label data-tip="Ready-made shapes for topology experiments; they are added as objects and pushed through the network.">Shape</label>
+            <div class="group-label">Add a shape</div>
+            <div id="presetBtns" class="btns"></div>
+            <div class="row"><label data-tip="Ready-made shapes for topology experiments; they are added as objects and pushed through the network.">More</label>
           <select id="shapeSel"></select><button id="addShape">Add</button></div>
-        <div id="objList"></div>
-        <div id="pinList"></div>
-        <div class="btns"><button id="clearObjects" data-tip="Remove all drawn objects (curves, circles, regions, spheres). Pins stay.">Clear objects</button>
+            <div class="group-label">Draw by hand</div>
+            <div id="toolbar"></div>
+            <div class="note" id="toolNote"></div>
+            <div class="group-label">Your objects <span class="tag">— click one to edit</span></div>
+            <div id="objList"></div>
+            <div id="pinList"></div>
+            <div class="btns"><button id="clearObjects" data-tip="Remove all drawn objects (curves, circles, regions, spheres). Pins stay.">Clear objects</button>
           <button id="clearPins" data-tip="Remove all pinned points.">Clear pins</button>
           <button id="examples" data-tip="Add a few example objects.">Add examples</button></div>
-        <details class="sub" data-sec="obj-draw">
+            <details class="sub" data-sec="obj-draw">
           <summary>Drawing settings</summary>
           <div class="row"><label data-tip="Each drawn object is resampled to this many points, connected in order so stretching and folding stay visible.">Points</label>
             <input id="nPoints" type="range" min="200" max="500" step="10"><span class="val" id="nPointsVal"></span></div>
@@ -535,6 +555,9 @@
         <div id="layerTable"></div>
             </div>
           </details>
+          </div>
+          <div class="pane" data-pane="object" data-title="How it changes">
+            <div id="objLog" data-sec="objlog"></div>
           </div>
           <div class="pane" data-pane="experiments" data-title="Topology experiments">
             <div class="sec-body">

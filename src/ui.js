@@ -272,6 +272,7 @@
   function userDrawables() {
     const out = [];
     for (const o of S.objects) {
+      if (o.hidden) continue;
       // Fibonacci spheres are one long spiral: draw it lighter so the surface stays readable
       out.push({ id: `o${o.id}`, role: 'object', kind: 'line', closed: o.closed, color: o.color, width: 2,
         alpha: o.type === 'sphere' || o.surface ? 0.6 : 1, pts: o.points.map((p) => Float64Array.from(p)) });
@@ -288,6 +289,7 @@
     if (S.dim === 2) for (const a of [-2, -1, 0, 1, 2]) for (const b of [-2, -1, 0, 1, 2]) pts.push(vec(a, b));
     else for (const a of [-1, 0, 1]) for (const b of [-1, 0, 1]) for (const c of [-1, 0, 1]) pts.push(vec(a, b, c));
     for (const o of S.objects) {
+      if (o.hidden) continue;
       const k = Math.max(1, Math.floor(o.points.length / 12));
       for (let i = 0; i < o.points.length; i += k) pts.push(Float64Array.from(o.points[i]));
     }
@@ -1241,6 +1243,7 @@
       netVersion++; renderNetNote(); invalidate();
     };
     $('addShape').onclick = addShape;
+    bindObjects();
     $('expRun').onclick = () => runExperiment(0);
     $('expPlus').onclick = () => runExperiment(1);
     $('transform').onchange = (e) => { S.train.transform = e.target.value; training = false; rebuildTrainer(); invalidate(); };
@@ -1542,6 +1545,7 @@
     $('outputLinear').checked = S.net.outputLinear;
     $('homeo').checked = !!S.net.homeo;
     renderShapeSel();
+    renderPresetButtons();
     renderExperiments();
     renderNetNote();
     $('initDist').value = S.net.init.dist;
@@ -1591,19 +1595,201 @@
     }
   }
 
+  // ---- objects: chips, a card for the selected one, ready-made shapes, transformation log ----------------
+  const escHtml = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  let selObj = null;            // id of the object whose card is open
+
+  /** Ready-made shapes for the Objects menu, centred at the origin; the card then moves and resizes them. */
+  const PRESETS = {
+    2: [['circle', 'Circle'], ['square', 'Square'], ['star', 'Star'], ['wave', 'Wave'], ['disk', 'Disk'], ['figure8', 'Figure 8']],
+    3: [['sphere', 'Sphere'], ['cube', 'Cube'], ['torus', 'Torus'], ['ring', 'Ring'], ['trefoil', 'Knot']],
+  };
+
+  function addPreset(kind) {
+    const n = S.nPoints, shape = (name) => NN.makeShape(name, n).components[0].pts.map((p) => Array.from(p));
+    const name = Object.fromEntries(PRESETS[S.dim])[kind].toLowerCase();
+    let o;
+    if (kind === 'circle') o = { closed: true, points: linspace(0, 2 * Math.PI, n + 1).slice(0, n).map((a) => [0.6 * Math.cos(a), 0.6 * Math.sin(a)]) };
+    else if (kind === 'wave') o = { closed: false, points: linspace(-1, 1, n).map((x) => [x, 0.3 * Math.sin(4 * x)]) };
+    else if (kind === 'disk') {
+      const r = 0.6, ga = Math.PI * (3 - Math.sqrt(5)), k = Math.round(n * 0.6);
+      o = { closed: true, points: linspace(0, 2 * Math.PI, n - k + 1).slice(0, n - k).map((a) => [r * Math.cos(a), r * Math.sin(a)]),
+        interior: [...Array(k)].map((_, i) => { const q = r * 0.97 * Math.sqrt((i + 0.5) / k); return [q * Math.cos(ga * i), q * Math.sin(ga * i)]; }) };
+    } else if (kind === 'sphere') o = { closed: false, surface: true, points: NN.fibonacciSphere(n, [0, 0, 0], 0.6).map((p) => Array.from(p)) };
+    else if (kind === 'ring') o = { closed: true, points: linspace(0, 2 * Math.PI, n + 1).slice(0, n).map((a) => [0.7 * Math.cos(a), 0.7 * Math.sin(a), 0]) };
+    else {
+      const map = { square: 'square', star: 'star', figure8: 'figure8', cube: 'cube', torus: 'torus', trefoil: 'trefoil' }[kind];
+      const sh = NN.makeShape(map, n).components[0];
+      o = { closed: sh.closed, surface: S.dim === 3 && !sh.closed, points: shape(map) };
+    }
+    addObject({ type: name, ...o });
+    selObj = S.objects[S.objects.length - 1].id;
+    renderObjList();
+  }
+
+  function renderPresetButtons() {
+    $('presetBtns').innerHTML = PRESETS[S.dim].map(([k, label]) => `<button data-preset="${k}">${label}</button>`).join('');
+  }
+
+  /** Remember the shape as drawn, so size, position and point count can be changed without drift. */
+  function ensureBase(o) {
+    if (o.base) return;
+    const c = o.points[0].map((_, k) => o.points.reduce((a, p) => a + p[k], 0) / o.points.length);
+    o.base = { points: o.points.map((p) => p.slice()), interior: o.interior ? o.interior.map((p) => p.slice()) : null, c };
+    o.scale = 1; o.offset = c.map(() => 0); o.n = o.points.length;
+  }
+
+  function applyEdit(o) {
+    const B = o.base, place = (p) => p.map((v, k) => B.c[k] + o.scale * (v - B.c[k]) + o.offset[k]);
+    const pts = o.n === B.points.length ? B.points : resample(B.points, o.n, o.closed);
+    o.points = pts.map(place);
+    if (B.interior) o.interior = B.interior.map(place);
+    invalidate();
+    renderLogSoon();
+  }
+
   function renderObjList() {
     const box = $('objList');
-    box.innerHTML = S.objects.length ? '' : '<div class="note">No objects yet.</div>';
-    for (const o of S.objects) {
-      const row = document.createElement('div');
-      row.className = 'obj';
-      row.innerHTML = `<span class="dot" style="background:${o.color}"></span><span>${o.type} · ${o.points.length + (o.interior ? o.interior.length : 0)} pts</span>`;
-      const del = document.createElement('button');
-      del.textContent = '✕'; del.dataset.tip = 'Delete this object';
-      del.onclick = () => { S.objects = S.objects.filter((x) => x !== o); renderObjList(); invalidate(); };
-      row.appendChild(del);
-      box.appendChild(row);
+    if (!S.objects.length) { box.innerHTML = '<div class="note">No objects yet: add a shape above, or draw one.</div>'; return; }
+    if (!S.objects.some((o) => o.id === selObj)) selObj = null;
+    box.innerHTML = '<div class="ochips">' + S.objects.map((o) => `<button class="ochip${o.id === selObj ? ' on' : ''}${o.hidden ? ' off' : ''}" data-id="${o.id}">
+      <span class="dot" style="background:${o.color}"></span>${escHtml(o.type)}</button>`).join('') + '</div>';
+    const o = S.objects.find((x) => x.id === selObj);
+    if (!o) return;
+    ensureBase(o);
+    const axes = S.dim === 2 ? ['x', 'y'] : ['x', 'y', 'z'];
+    const slider = (id, label, min, max, step, v, fmt) => `<div class="row"><label>${label}</label>
+      <input data-edit="${id}" type="range" min="${min}" max="${max}" step="${step}" value="${v}"><span class="val">${fmt(v)}</span></div>`;
+    box.insertAdjacentHTML('beforeend', `<div class="ocard">
+      <div class="row"><label>Colour</label><input data-edit="color" type="color" value="${/^#[0-9a-f]{6}$/i.test(o.color) ? o.color : '#e3b341'}">
+        <label class="inline"><input data-edit="visible" type="checkbox"${o.hidden ? '' : ' checked'}> visible</label></div>
+      ${slider('scale', 'Size', 0.2, 3, 0.05, o.scale, (v) => `×${(+v).toFixed(2)}`)}
+      ${axes.map((a, k) => slider(`off${k}`, `Move ${a}`, -2.5, 2.5, 0.05, o.offset[k], (v) => (+v >= 0 ? '+' : '') + (+v).toFixed(2))).join('')}
+      ${slider('n', 'Points', 30, 500, 10, o.n, (v) => v)}
+      <div class="btns"><button data-edit="log" class="primary">ⓘ How it changes</button><button data-edit="delete">Delete</button></div>
+    </div>`);
+  }
+
+  function bindObjects() {
+    $('presetBtns').addEventListener('click', (e) => { const b = e.target.closest('[data-preset]'); if (b) addPreset(b.dataset.preset); });
+    const box = $('objList');
+    box.addEventListener('click', (e) => {
+      const chip = e.target.closest('.ochip');
+      if (chip) { selObj = +chip.dataset.id === selObj ? null : +chip.dataset.id; renderObjList(); return; }
+      const o = S.objects.find((x) => x.id === selObj);
+      const act = e.target.closest('[data-edit]');
+      if (!o || !act) return;
+      if (act.dataset.edit === 'delete') { S.objects = S.objects.filter((x) => x !== o); selObj = null; renderObjList(); invalidate(); }
+      else if (act.dataset.edit === 'log') { logObj = o.id; if (window.Shell) window.Shell.openSheet('object', false); renderObjLog(); }
+    });
+    box.addEventListener('input', (e) => {
+      const o = S.objects.find((x) => x.id === selObj), el = e.target, k = el.dataset.edit;
+      if (!o || !k) return;
+      if (k === 'color') { o.color = el.value; box.querySelector(`.ochip[data-id="${o.id}"] .dot`).style.background = el.value; invalidate(); renderLogSoon(); return; }
+      if (k === 'visible') { o.hidden = !el.checked; box.querySelector(`.ochip[data-id="${o.id}"]`).classList.toggle('off', o.hidden); invalidate(); return; }
+      if (k === 'scale') o.scale = +el.value;
+      else if (k === 'n') o.n = +el.value;
+      else if (k.startsWith('off')) o.offset[+k.slice(3)] = +el.value;
+      const val = el.parentElement.querySelector('.val');
+      if (val) val.textContent = k === 'scale' ? `×${(+el.value).toFixed(2)}` : k === 'n' ? el.value : ((+el.value >= 0 ? '+' : '') + (+el.value).toFixed(2));
+      applyEdit(o);
+    });
+  }
+
+  // ---- transformation log: what every layer does to one object --------------------------------------------
+  let logObj = null, logKey = '', logTimer = 0;
+  function renderLogSoon() { logKey = ''; }
+
+  function segCross(a, b, c, d) {
+    const o = (p, q, r) => (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]);
+    const d1 = o(a, b, c), d2 = o(a, b, d), d3 = o(c, d, a), d4 = o(c, d, b);
+    return d1 * d2 < 0 && d3 * d4 < 0;
+  }
+
+  /** Per stage: length and stretch (in the stage's full space), area and self-crossings (2D stages only). */
+  function objectStats(d, closed) {
+    const n = d.st.length, out = [];
+    const seg = (s) => {
+      const L = [];
+      for (let i = 0; i < n - 1 + (closed ? 1 : 0); i++) {
+        const a = d.st[i][s], b = d.st[(i + 1) % n][s];
+        let q = 0; for (let k = 0; k < a.length; k++) q += (a[k] - b[k]) ** 2;
+        L.push(Math.sqrt(q));
+      }
+      return L;
+    };
+    const L0 = seg(0), len0 = L0.reduce((a, b) => a + b, 0);
+    for (let s = 0; s < traces.nStages; s++) {
+      const L = s ? seg(s) : L0, len = L.reduce((a, b) => a + b, 0), dim = d.st[0][s].length;
+      let maxS = 0, minS = Infinity;
+      for (let i = 0; i < L.length; i++) if (L0[i] > 1e-9) { const r = L[i] / L0[i]; maxS = Math.max(maxS, r); minS = Math.min(minS, r); }
+      const row = { s, dim, len: len / (len0 || 1), maxS, minS, area: null, cross: null };
+      if (dim === 2) {
+        const P = d.st.map((p) => p[s]);
+        if (closed) { let A = 0; for (let i = 0; i < n; i++) { const p = P[i], q = P[(i + 1) % n]; A += p[0] * q[1] - q[0] * p[1]; } row.area = A / 2; }
+        let c = 0;
+        const m = n - 1 + (closed ? 1 : 0), step = Math.max(1, Math.floor(n / 160));   // ≤ ~160 segments: fast enough per frame
+        for (let i = 0; i < m; i += step) for (let j = i + 2 * step; j < m; j += step) {
+          if (closed && i === 0 && j + step >= m) continue;
+          if (segCross(P[i], P[Math.min(i + step, n - 1) % n], P[j], P[Math.min(j + step, m) % n])) c++;
+        }
+        row.cross = c;
+      }
+      out.push(row);
     }
+    return out;
+  }
+
+  function renderObjLog() {
+    const box = $('objLog'), o = S.objects.find((x) => x.id === logObj);
+    if (!o) { box.innerHTML = '<div class="note">Pick an object and press ⓘ How it changes.</div>'; return; }
+    if (!traces) computeTraces();
+    const d = traces.ds.find((x) => x.id === `o${o.id}`);
+    if (!d) { box.innerHTML = '<div class="note">This object is hidden.</div>'; return; }
+    const st = objectStats(d, o.closed), a0 = st[0].area;
+    const firstCross = st.find((r) => r.cross > 0);
+    const fmtR = (r) => (r >= 10 ? r.toFixed(0) : r >= 1 ? r.toFixed(2) : r.toPrecision(2));
+    let h = `<div class="olog-head"><span class="dot" style="background:${o.color}"></span><b>${escHtml(o.type)}</b> · ${d.st.length} points</div>
+      <div class="note">Length and stretch are measured in each stage's own space ℝᵏ. Area and self-crossings only exist in 2D stages:
+        in a wider layer a curve has room to pass around itself, and a crossing on screen is only the projection.</div>`;
+    h += `<div class="note olog-sum">${o.closed && S.dim === 2 && a0 !== null && st[st.length - 1].area !== null
+      ? (Math.sign(st[st.length - 1].area) !== Math.sign(a0) ? '⚠ The output is mirrored (orientation flipped). ' : '') : ''}${
+      firstCross ? `⚠ The curve first crosses itself at <b>${stageName(firstCross.s).title}</b>: two different inputs land on the same point there.`
+        : S.dim === 2 ? '✓ It never crosses itself in a 2D stage.' : ''}</div>`;
+    h += '<table class="olog"><tr><th></th><th>stage</th><th data-tip="Length of the curve, relative to the input">length ×</th><th data-tip="Smallest … largest stretch of one piece of the curve">stretch</th><th data-tip="Enclosed area relative to the input; negative = mirrored">area ×</th><th data-tip="Places where the curve crosses itself (2D stages only)">cross</th></tr>';
+    for (const r of st) {
+      const nm = stageName(r.s);
+      const area = r.area === null || !a0 ? '—' : `${r.area / a0 < 0 ? '−' : ''}${fmtR(Math.abs(r.area / a0))}`;   // negative: mirrored
+      h += `<tr data-s="${r.s}"><td><canvas class="othumb" data-s="${r.s}"></canvas></td><td>${nm.title}<br><span class="tag">ℝ${String(r.dim).split('').map((c) => '⁰¹²³⁴⁵⁶⁷⁸⁹'[+c]).join('')}</span></td>
+        <td>×${fmtR(r.len)}</td><td>${r.s ? `${fmtR(r.minS)}…${fmtR(r.maxS)}` : '—'}</td><td>${area}</td>
+        <td class="${r.cross ? 'bad' : ''}">${r.cross === null ? '—' : r.cross}</td></tr>`;
+    }
+    box.innerHTML = h + '</table><div class="note">Click a row to show that stage.</div>';
+    // thumbnails: the object at every stage, as the view shows it (projected for wide layers)
+    box.querySelectorAll('canvas.othumb').forEach((cv) => {
+      const s = +cv.dataset.s, P = d.proj[s], vd = traces.vd, ctx = cv.getContext('2d'), W = 44, dpr = window.devicePixelRatio || 1;
+      cv.width = cv.height = W * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+      for (let i = 0; i < P.length; i += vd) { x0 = Math.min(x0, P[i]); x1 = Math.max(x1, P[i]); y0 = Math.min(y0, P[i + 1]); y1 = Math.max(y1, P[i + 1]); }
+      const k = (W - 6) / Math.max(x1 - x0, y1 - y0, 1e-9);
+      ctx.strokeStyle = o.color; ctx.lineWidth = 1.2; ctx.beginPath();
+      for (let i = 0; i < P.length; i += vd) {
+        const X = 3 + k * (P[i] - x0) + (W - 6 - k * (x1 - x0)) / 2, Y = W - 3 - k * (P[i + 1] - y0) - (W - 6 - k * (y1 - y0)) / 2;
+        if (i) ctx.lineTo(X, Y); else ctx.moveTo(X, Y);
+      }
+      if (o.closed) ctx.closePath();
+      ctx.stroke();
+    });
+    box.querySelectorAll('tr[data-s]').forEach((tr) => { tr.onclick = () => animateTo(+tr.dataset.s); });
+  }
+
+  /** Keep the log in step with training (at most twice a second, only while it is visible). */
+  function updateObjLog(now) {
+    if (!isOpen('objlog') || now - logTimer < 500) return;
+    const key = `${logObj}|${netVersion}|${trainer ? trainer.step_ : 0}|${S.objects.length}`;
+    if (key === logKey) return;
+    logKey = key; logTimer = now;
+    try { renderObjLog(); } catch (err) { console.error(err); }
   }
 
   function addExamples() {
@@ -1717,6 +1903,7 @@
     if (now - lastLossDraw > 120 && training) { if (isOpen('loss')) drawLoss(); lastLossDraw = now; }
     if (now - lastInspector > (training ? 120 : 60)) { lastInspector = now; try { renderInspectorAndNet(); } catch (err) { console.error(err); } }
     renderSummaries();
+    updateObjLog(now);
     if (analysisDirty && now - lastAnalysis > (training ? 700 : 150)) {
       analysisDirty = false; lastAnalysis = now;
       try { updateAnalysis(); } catch (err) { console.error(err); }
