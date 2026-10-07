@@ -51,7 +51,7 @@ One big view; everything else opens on demand, and one panel at a time (✕, Esc
   classifies each spot), and for 2D a third principal direction of wide layers as depth — right-drag to
   tilt the view and see how a wide layer lifts points over each other.
 - **My own goals**: a goal sends some points somewhere — a class to a point you drag, the classes apart
-  (cross-entropy), an object to a point, or an object kept in place. Goals train together with weights;
+  (cross-entropy), an object to a point, an object kept in place, or pinned points (Pin tool). Goals train together with weights;
   each card shows its loss formula and current value. The engine supports a loss type and weight per
   sample for this (`src/nn.js`, checked against finite differences).
 

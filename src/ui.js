@@ -201,6 +201,7 @@
     classSplit: { name: 'Separate the classes', formula: () => 'L = mean cross-entropy(softmax f(x), class): blue wins logit₁, red logit₂' },
     objectPoint: { name: 'Object → point', formula: () => 'L = mean ‖f(x) − A‖² over the object' },
     objectStay: { name: 'Object stays', formula: () => 'L = mean ‖f(x) − x‖² over the object: keep it where it is' },
+    pins: { name: 'Pinned points', formula: () => 'L = mean ‖f(xᵢ) − yᵢ‖² over the pins (add them with the Pin tool, ＋ Objects)' },
   };
 
   function defaultGoals() {
@@ -219,6 +220,7 @@
       else if (g.kind === 'classSplit') smp = raw.map((r) => ({ x: r.x, label: r.y, y: r.y, type: 'ce' }));
       else if (obj && g.kind === 'objectPoint') smp = obj.points.map((p) => ({ x: Float64Array.from(p), y: Float64Array.from(g.target), type: 'mse' }));
       else if (obj && g.kind === 'objectStay') smp = obj.points.map((p) => ({ x: Float64Array.from(p), y: Float64Array.from(p), type: 'mse' }));
+      else if (g.kind === 'pins') smp = S.pins.map((p) => ({ x: Float64Array.from(p.x), y: Float64Array.from(p.y), type: 'mse' }));
       smp.forEach((q) => { q.goal = g.id; });
       groups.push({ g, smp });
     }
@@ -1083,7 +1085,8 @@
     tool = id;
     if (id === 'pan') drawing = null;
     if (id === 'pin') {
-      if (S.train.target !== 'pins') { S.train.target = 'pins'; $('target').value = 'pins'; onTargetChange(); }
+      if (isGoals()) { if (!S.train.goals.some((g) => g.kind === 'pins')) addGoal('pins'); }   // pins join the other goals
+      else if (S.train.target !== 'pins') { S.train.target = 'pins'; $('target').value = 'pins'; onTargetChange(); }
       if (traces) animateTo(traces.nStages - 1);
     }
     if (['curve', 'circle', 'region', 'sphereDraw', 'probe', 'paint0', 'paint1'].includes(id)) animateTo(0);

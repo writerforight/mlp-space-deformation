@@ -191,6 +191,27 @@ def check_goals(b):
     assert len(b.js('return __app.S.train.goals')) == 4
 
 
+def check_pins_goal(b):
+    b.open()
+    b.click('#drawerBtn'); time.sleep(0.2)
+    b.set('target', 'goals', 'change'); time.sleep(0.3)
+    b.click('#objBtn'); time.sleep(0.2)
+    b.js("[...document.querySelectorAll('#toolbar button')].find(x=>x.textContent==='Pin').click()"); time.sleep(1.2)
+    assert b.js('return __app.S.train.target') == 'goals', 'the Pin tool must not switch the task away from my goals'
+    assert 'pins' in b.js('return __app.S.train.goals.map(g=>g.kind)')
+    b.drag(0.3, 0.2, 0.9, -0.7); time.sleep(0.3)
+    assert len(b.js('return __app.S.pins')) == 1
+    pin = b.js('const g=__app.S.train.goals.find(g=>g.kind==="pins"); return __app.trainer.tasks[0].filter(q=>q.goal===g.id).length')
+    assert pin == 1, pin
+    # alone (the default class goals would pull the same spot elsewhere), the pin is met
+    while b.js("return __app.S.train.goals.some(g=>g.kind!=='pins')"):
+        b.js("const g=__app.S.train.goals.find(g=>g.kind!=='pins'); document.querySelector(`[data-g=\"${g.id}\"][data-k=remove]`).click()")
+        time.sleep(0.2)
+    b.train(3)
+    err = b.js('const p=__app.S.pins[0], o=__app.net.predict(p.x); return Math.hypot(o[0]-p.y[0], o[1]-p.y[1])')
+    assert err < 0.05, err
+
+
 def check_timeline(b):
     b.open()
     b.set('target', 'classify', 'change')
@@ -252,7 +273,7 @@ def check_narrow_screen(b):
 
 
 CHECKS = [check_guided_start, check_guided_goals_and_tour, check_shell_panels, check_strip, check_objects, check_goals,
-          check_timeline, check_view_background_and_tilt, check_dimension_switch, check_basis_box_and_inspector]
+          check_pins_goal, check_timeline, check_view_background_and_tilt, check_dimension_switch, check_basis_box_and_inspector]
 
 
 def main():
