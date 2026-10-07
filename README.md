@@ -8,7 +8,7 @@ University.
 
 **▶ Live demo: https://writerforight.github.io/mlp-space-deformation/**
 
-![A grid, the unit circle and two drawn objects pushed through a 3-layer tanh network, one sub-step at a time](docs/deformation.gif)
+![A grid, the unit circle, the basis vectors and two objects pushed through a 3-layer tanh network, one sub-step at a time](docs/deformation.gif)
 
 There is no backend, no build step and no machine-learning library. The MLP, backpropagation, SGD,
 Adam, Jacobians, PCA, the neural tangent kernel and the continual-learning methods are written from
