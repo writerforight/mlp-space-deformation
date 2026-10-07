@@ -2207,10 +2207,31 @@
   // Main loop
   // ===========================================================================
 
+  /*
+   * Draw only when something changed: the stage, the weights, the view, the camera — or for a moment after
+   * any pointer / key / input event (hover effects, toggles, drags).  Nothing is drawn behind the guided
+   * start.  An idle page then costs almost nothing.
+   */
+  let lastSig = '', activeUntil = 0;
+  const poke = () => { activeUntil = performance.now() + 400; };
+  for (const ev of ['pointerdown', 'pointermove', 'pointerup', 'wheel', 'keydown', 'input', 'change', 'click', 'resize']) {
+    (ev === 'resize' ? window : document).addEventListener(ev, poke, { capture: true, passive: true });
+  }
+  function viewSig() {
+    return [t.toFixed(4), netVersion, trainer ? trainer.step_ : 0, traces ? 1 : 0, viz2.cx, viz2.cy, viz2.scale, viz2.w, viz2.h,
+      cam.yaw, cam.pitch, tool, drawing ? 1 : 0, S.dim].join('|');
+  }
+
   function frame(now) {
     advanceAnimation(now);
     if (training) trainSteps(S.train.stepsPerFrame);
-    try { render(); } catch (err) { console.error(err); }
+    if (!document.body.classList.contains('wizard-open')) {
+      const sig = viewSig();
+      if (sig !== lastSig || now < activeUntil || anim || playing) {
+        try { render(); } catch (err) { console.error(err); }
+        lastSig = viewSig();
+      }
+    }
     if (now - lastLossDraw > 120 && training) { if (isOpen('loss')) drawLoss(); lastLossDraw = now; }
     if (now - lastInspector > (training ? 120 : 60)) { lastInspector = now; try { renderInspectorAndNet(); } catch (err) { console.error(err); } }
     renderSummaries();

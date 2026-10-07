@@ -16,6 +16,7 @@
   const pipe = $('pipe');
   let sig = '';
   let centers = [];             // x of every stage's slot, relative to the pipe
+  let lastT = -1, lastSigDrawn = '';  // the marker only moves when the stage or the network changes
 
   function build() {
     const net = App.net;
@@ -83,7 +84,7 @@
     App.scrubTo(stageAtX(e.clientX - box.left + pipe.scrollLeft));
   });
   window.addEventListener('pointerup', () => { drag = null; setTimeout(() => { dragged = false; }, 0); });
-  window.addEventListener('resize', () => requestAnimationFrame(measure));
+  window.addEventListener('resize', () => requestAnimationFrame(() => { measure(); lastT = -1; }));
 
   // ---- loss sparkline -----------------------------------------------------------------------------------
   const spark = $('lossSpark');
@@ -116,7 +117,8 @@
   function frame() {
     const net = App.net;
     if (net && net.acts.join() + '|' + net.dims.join() !== sig) build();
-    if (centers.length) {
+    if (centers.length && (App.t !== lastT || sig !== lastSigDrawn)) {
+      lastT = App.t; lastSigDrawn = sig;
       const t = App.t, n = centers.length - 1;
       const i = Math.min(n - 1, Math.floor(t)), u = t - i;
       const x = n === 0 ? centers[0] : centers[i] + u * (centers[Math.min(n, i + 1)] - centers[i]);

@@ -40,6 +40,8 @@
   }
 
   function buildNext() {
+    // previews are only trained while the guide is open (a page opened at #workspace never trains them)
+    if (!document.body.classList.contains('wizard-open')) { building = null; return; }
     building = queue.shift() || null;
     if (!building) return;
     const [problem, dim] = building.split('/');
@@ -73,8 +75,11 @@
     ctx.fillText('training a tiny network…', w / 2, h / 2);
   }
 
+  let odd = false;
   function frame(now) {
     if (!document.body.classList.contains('wizard-open')) { animating = false; return; }
+    odd = !odd;
+    if (odd) { requestAnimationFrame(frame); return; }          // previews at 30 fps: smooth enough, half the work
     const sec = screen(current);
     players.forEach((p, canvas) => {
       if (!sec.contains(canvas)) return;
@@ -516,6 +521,7 @@
     STEPS.forEach((s) => screen(s).classList.toggle('active', s === current));
     renderStepBar();
     startAnimation();
+    if (!building) buildNext();
   }
 
   function close() {
