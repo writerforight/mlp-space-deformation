@@ -155,6 +155,15 @@ anti-forgetting methods):
 node test/nn.test.js
 ```
 
+End-to-end checks in a real browser (guided start, panels, the model strip, objects, goals, the training
+timeline, the class background and tilt, 2D ↔ 3D, the basis box and inspector, a narrow screen). They
+need Firefox and geckodriver, and only Python's standard library:
+
+```bash
+python3 test/browser_test.py            # all checks
+python3 test/browser_test.py goals      # only the checks whose name contains "goals"
+```
+
 ## Deploy on GitHub Pages
 
 1. Push this folder to a GitHub repository.
@@ -175,7 +184,7 @@ src/shell.js    workspace layout: popovers, the right-hand sheet, the model draw
 src/strip.js    the model strip: the network as the path a point travels, scrubbing, loss sparkline
 src/wizard.js   the guided start (dimension → problem → data → network)
 src/minis.js    the guided start's previews (tiny networks trained in the page) and the one-layer demo
-test/           node test of the math in nn.js
+test/           nn.test.js: the math in nn.js (node) · browser_test.py: the page, end to end (Firefox)
 ```
 
 ## Math background
