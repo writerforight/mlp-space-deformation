@@ -44,7 +44,7 @@
   #hint { position: absolute; bottom: 8px; left: 12px; color: var(--muted); pointer-events: none; font-size: 12px; }
   /* ---- model strip: layers ... | train | settings drawer ---- */
   #modelStrip { display: flex; align-items: center; gap: 14px; padding: 8px 12px; border-top: 1px solid var(--line); background: var(--panel); }
-  .ms-layers { flex: 1; display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .ms-layers { flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; min-width: 0; }   /* ▶ sits right next to the network */
   .ms-layers input[type=range] { flex: 1; min-width: 80px; }
   /* goals */
   .gcard { border: 1px solid var(--line); border-radius: 8px; padding: 4px 10px 8px; margin: 6px 0; background: var(--panel2); }
@@ -73,7 +73,7 @@
   table.olog tr[data-s]:hover td { background: var(--panel2); }
   canvas.othumb { width: 44px; height: 44px; display: block; background: var(--bg); border-radius: 4px; }
   /* the network as a path: Input ▸ [W | σ] ▸ ... ▸ Output */
-  .pipe { position: relative; flex: 1; display: flex; align-items: center; justify-content: safe center; gap: 4px; min-width: 0; overflow-x: auto; padding: 6px 2px 10px;
+  .pipe { position: relative; flex: 0 1 auto; display: flex; align-items: center; justify-content: safe center; gap: 4px; min-width: 0; overflow-x: auto; padding: 6px 2px 10px;
     cursor: ew-resize; user-select: none; scrollbar-width: none; }
   .pipe::-webkit-scrollbar { display: none; }
   .pipe .pn { padding: 4px 9px; border-radius: 6px; font-size: 12px; white-space: nowrap; transition: background 0.15s, border-color 0.15s; }
@@ -405,7 +405,7 @@
     <div class="help-title">Quick guide</div>
     <ol>
       <li><b>Look:</b> the strip at the bottom is the network: Input ▸ W₁ | tanh ▸ … ▸ Output. Press ▶, click a step, or drag along the strip — objects and the grid go through every layer (linear step, then activation).</li>
-      <li><b>Draw:</b> <b>＋ Objects</b> (bottom left) — pick a tool, draw on the view, or add a ready-made shape.</li>
+      <li><b>Draw:</b> <b>＋ Objects</b> (bottom left) — pick a tool, draw on the view, or add a ready-made shape. Every object is resampled to <i>Points</i> points in total (Drawing settings), equally spaced along it.</li>
       <li><b>Inspect:</b> ⓘ next to a layer in the strip — weights, activation and history. Double-click a weight to change it. <b>◫</b> shows the neuron diagram.</li>
       <li><b>Train:</b> <b>Model ▲</b> opens network, goal and training settings; pick a task, press <b>★ Recommended</b>, then <b>▶ Train</b>.
         With <i>my own goals</i> you mix goals (class → point, separate classes, object → point, object stays) and drag their targets at the output.</li>
@@ -485,7 +485,7 @@
           <button id="examples" data-tip="Add a few example objects.">Add examples</button></div>
             <details class="sub" data-sec="obj-draw">
           <summary>Drawing settings</summary>
-          <div class="row"><label data-tip="Each drawn object is resampled to this many points, connected in order so stretching and folding stay visible.">Points</label>
+          <div class="row"><label data-tip="Total number of points per new object (not per unit length): each drawn or ready-made object is resampled to this many points, equally spaced along it and connected in order, so stretching and folding stay visible. A long curve gets the same number as a short one. Change it per object in its card.">Points</label>
             <input id="nPoints" type="range" min="200" max="500" step="10"><span class="val" id="nPointsVal"></span></div>
           <div id="sphereControls" class="hidden">
             <div class="row"><label data-tip="Centre and radius of the sphere to add or to draw on.">Sphere</label>
@@ -711,7 +711,7 @@
     </div>
     <div id="modelStrip">
       <div class="ms-layers">
-        <button id="play" data-tip="Animate through the layers (Space).">▶</button>
+        <button id="play" class="primary" data-tip="Animate through the layers (Space).">▶</button>
         <div id="pipe" class="pipe" data-tip="The network as the path a point travels. Click a step to go there, drag to scrub, ⓘ inspects a layer."></div>
         <button id="stepBack" class="mini" data-tip="Previous sub-step (←).">⏮</button>
         <button id="stepFwd" class="mini" data-tip="Next sub-step: linear, then activation (→).">⏭</button>
