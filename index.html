@@ -38,7 +38,7 @@
   }
   #stageLabel b { font-size: 14px; }
   #legend {
-    position: absolute; bottom: 30px; left: 12px; right: 12px; max-width: 640px; pointer-events: none;
+    position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); width: max-content; max-width: min(640px, calc(100% - 260px)); pointer-events: none;
     background: rgba(13, 17, 23, 0.78); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; font-size: 12px;
   }
   #hint { position: absolute; bottom: 8px; left: 12px; color: var(--muted); pointer-events: none; font-size: 12px; }
@@ -432,7 +432,13 @@
           <label data-tip="Image of a small circle under the local Jacobian: shows local stretching, squashing and rotation."><input id="showJac" type="checkbox"> Jacobian ellipses</label>
           <label data-tip="Colour by the sign of det(J): green keeps orientation, violet is mirrored (a fold), grey is collapsed."><input id="showDet" type="checkbox"> det(J) sign</label>
           <label data-tip="Colour each point by how far it has moved from its input position."><input id="showDist" type="checkbox"> Distance moved</label>
+          <label data-tip="Classification tasks: colour the background by where the rest of the network sends each spot (blue / red = the class that wins, dark = undecided). Shown at every stage; in a stage wider than 2 it is the PCA plane of that stage."><input id="showBg" type="checkbox"> Class background</label>
         </div>
+        <div class="group-label">Wide layers (2D)</div>
+        <div class="checks single">
+          <label data-tip="A layer wider than 2 lives in ℝᵏ. The view shows its two main directions; with this on, the third one becomes depth. Right-drag the view to tilt it and look."><input id="showLift" type="checkbox"> Third direction as depth (right-drag to tilt)</label>
+        </div>
+        <div class="btns"><button id="flatBtn" data-tip="Look straight down again (or double-click the view).">⟲ Flat view</button></div>
         <div class="group-label">View</div>
         <div class="checks single">
           <label data-tip="Keep the camera zoomed to the current shapes (hides pure scaling, shows shape)."><input id="autoFit" type="checkbox"> Auto-fit view</label>

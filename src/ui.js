@@ -35,7 +35,7 @@
         overrides: [], init: { dist: 'he', scale: 1.6, seed: 2 } },
       objects: [],
       nPoints: 300,
-      display: { grid: true, circle: true, basis: true, origin: true, jac: false, det: false, dist: false, autoFit: false },
+      display: { grid: true, circle: true, basis: true, origin: true, jac: false, det: false, dist: false, autoFit: false, bg: true, lift: true },
       train: { target: 'none', dataset: 'moons', nData: 400, noise: 0.08, dataSeed: 0, transform: 'rotation', morph: MORPHS[dim][0].join('>'), amount: 0.9, optimizer: 'adam', lr: 0.01, batch: 32, stepsPerFrame: 5,
         redrawEvery: 10, mode: 'joint', stepsPerTask: 300, nTasks: 3, method: 'none', lambda: 100 },
       pins: [],
@@ -338,6 +338,7 @@
    */
   function computeTraces() {
     const vd = S.dim, nStages = 2 * net.nLayers + 1;
+    depthInfo = [];
     const needJ = S.display.jac || S.display.det;
     const ds = allDrawables();
     for (const d of ds) {
@@ -348,7 +349,7 @@
         else d.st.push(net.stages(p));
       }
       d.hasJ = needJ && wantJ;
-      d.proj = []; d.pj = [];
+      d.proj = []; d.pj = []; d.depth = [];
     }
     const bases = [];
     for (let s = 0; s < nStages; s++) {
@@ -380,6 +381,22 @@
         if (flipped) project();
       }
       bases.push(P);
+      // 2D mode, layer wider than 2: the third principal direction becomes depth (seen when the view is tilted)
+      const P3 = vd === 2 && S.display.lift && cloud[0].length > 2 ? NN.pcaBasis(cloud, 3) : null;
+      depthInfo[s] = P3 ? { explained: P3.explained, dim: cloud[0].length } : null;
+      for (const d of ds) {
+        const n = d.st.length, z = new Float64Array(n);
+        if (P3) {
+          const b = P3.basis[2];
+          for (let i = 0; i < n; i++) { const x = d.st[i][s]; let v = 0; for (let j = 0; j < x.length; j++) v += b[j] * x[j]; z[i] = v; }
+        }
+        d.depth[s] = z;
+      }
+      if (P3 && s > 0) {                  // keep the depth axis pointing the same way as in the previous stage
+        let c = 0;
+        for (const d of ds) for (let i = 0; i < d.depth[s].length; i++) c += d.depth[s][i] * d.depth[s - 1][i];
+        if (c < 0) for (const d of ds) d.depth[s] = d.depth[s].map((v) => -v);
+      }
       for (const d of ds) {
         if (!d.hasJ) continue;
         const n = d.st.length, d0 = vd, out = new Float64Array(n * vd * d0);
@@ -415,11 +432,39 @@
     return [s, Math.min(1, Math.max(0, tt - s))];
   }
 
+  // ---- 2D tilt camera: turn the plane to look at the third principal direction of wide layers ----------
+  const cam = { yaw: 0, pitch: 0 };
+  let depthInfo = [];             // per stage: { explained, dim } when a depth axis exists
+  const tilted = () => S.dim === 2 && (Math.abs(cam.yaw) > 1e-4 || Math.abs(cam.pitch) > 1e-4);
+  /** (x, y, depth) -> screen plane: turn about the vertical axis (yaw), then tip forward (pitch). */
+  function camXY(x, y, z) {
+    const cy = Math.cos(cam.yaw), sy = Math.sin(cam.yaw), cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
+    const x1 = cy * x + sy * z, z1 = -sy * x + cy * z;
+    return [x1, cp * y - sp * z1];
+  }
+
   function positionsAt(d, tt) {
-    const [s, f] = stageSplit(tt), a = d.proj[s], b = d.proj[Math.min(s + 1, traces.nStages - 1)];
+    const [s, f] = stageSplit(tt), s2 = Math.min(s + 1, traces.nStages - 1), a = d.proj[s], b = d.proj[s2];
     const out = new Float64Array(a.length);
     for (let i = 0; i < a.length; i++) out[i] = a[i] + f * (b[i] - a[i]);
+    if (tilted() && d.depth && d.depth[s]) {
+      const za = d.depth[s], zb = d.depth[s2];
+      for (let i = 0; i < za.length; i++) {
+        const q = camXY(out[2 * i], out[2 * i + 1], za[i] + f * (zb[i] - za[i]));
+        out[2 * i] = q[0]; out[2 * i + 1] = q[1];
+      }
+    }
     return out;
+  }
+
+  /** Animate the camera back to looking straight down. */
+  function flatView() {
+    const y0 = cam.yaw, p0 = cam.pitch, t0 = performance.now();
+    (function step(now) {
+      const u = Math.min(1, (now - t0) / 400), e = 1 - (1 - u) ** 3;
+      cam.yaw = y0 * (1 - e); cam.pitch = p0 * (1 - e);
+      if (u < 1) requestAnimationFrame(step); else { cam.yaw = 0; cam.pitch = 0; }
+    })(t0);
   }
 
   function jacAt(d, tt) {
@@ -468,14 +513,22 @@
         distMax = Math.max(distMax, Math.sqrt(s));
       }
     }
-    const showBg = vd === 2 && usesClasses() && tt < 0.5;
-    if (showBg) items.push(backgroundImage());
+    // class background: how the rest of the network would classify a point sitting here, at every stage
+    const showBg = vd === 2 && usesClasses() && D.bg && !tilted();
+    if (showBg) items.push(backgroundImage(Math.round(tt)));
     // say what the colours are: a reading rule applied to the network's output, not part of the network
     const legend = $('legend');
     legend.classList.toggle('hidden', !showBg);
     if (showBg) legend.textContent = isAnchors()
       ? 'Background colour = f(x)·(1, 0): how far the network moves each input toward the blue point (1, 0) (brighter blue) or the red point (−1, 0) (brighter red). Dark = halfway, i.e. the network is undecided there. Full colour at ±1.'
       : 'Background colour = logit₁ − logit₂: brighter blue where the first logit wins by more, brighter red where the second does; dark = undecided. Full colour at ±4.';
+    const bgStage = Math.round(tt), bgBasis = showBg && traces.bases[bgStage];
+    if (bgBasis && !bgBasis.exact) {
+      const ag = bgCache && bgCache.agree !== null ? ` Here it agrees with the network on ${(100 * bgCache.agree).toFixed(0)}% of the data points${
+        bgCache.agree < 0.95 ? ': the rest are separated along directions the slice does not show (tilt the view)' : ''}.` : '';
+      legend.textContent = `At this stage (ℝ${bgBasis.basis[0].length}) the colour is how the rest of the network classifies the PCA plane `
+        + `through the points — a 2D slice.${ag} ` + legend.textContent;
+    } else if (showBg && bgStage > 0) legend.textContent = 'How the rest of the network classifies each spot of this stage. ' + legend.textContent;
     for (const d of traces.ds) {
       if (d.role === 'jac' || d.role === 'probe' || d.role === 'pins' || d.role === 'interf') continue;
       const p = posCache.get(d);
@@ -487,11 +540,11 @@
           return Colors.seqColor(distMax > 0 ? Math.sqrt(s) / distMax : 0);
         });
       }
-      items.push({ id: d.id, kind: d.kind, pts: p, closed: d.closed, color: d.color, colors, width: d.width, alpha: d.alpha, size: d.size });
+      items.push({ id: d.id, kind: d.kind, pts: p, closed: d.closed, color: d.color, colors, width: d.width, alpha: d.alpha, size: d.size, fromDrawable: true });
       if (d.role === 'basis' && vd === 2 && p.length >= 4) {
         const n = p.length / 2;
-        items.push({ kind: 'arrow', from: [p[2 * n - 4], p[2 * n - 3]], to: [p[2 * n - 2], p[2 * n - 1]], color: d.color, width: 2.6 });
-        items.push({ kind: 'label', p: [p[2 * n - 2], p[2 * n - 1]], text: d.label, color: d.color });
+        items.push({ kind: 'arrow', from: [p[2 * n - 4], p[2 * n - 3]], to: [p[2 * n - 2], p[2 * n - 1]], color: d.color, width: 2.6, rotated: true });
+        items.push({ kind: 'label', p: [p[2 * n - 2], p[2 * n - 1]], text: d.label, color: d.color, rotated: true });
       }
     }
     // the target transform as a ghost, at the output stage
@@ -537,10 +590,10 @@
       const cur = posCache.get(pd);
       S.pins.forEach((pin, i) => {
         const col = PALETTE[i % PALETTE.length], c = Array.from(cur.subarray(i * vd, (i + 1) * vd));
-        items.push({ id: `pinErr${i}`, kind: vd === 2 ? 'arrow' : 'segments', from: c, to: pin.y, pts: Float64Array.from([...c, ...pin.y]), color: col, dash: [4, 4], width: 1.2, alpha: 0.7 });
+        items.push({ id: `pinErr${i}`, kind: vd === 2 ? 'arrow' : 'segments', from: c, to: pin.y, pts: Float64Array.from([...c, ...pin.y]), color: col, dash: [4, 4], width: 1.2, alpha: 0.7, fromRotated: true });
         items.push({ id: `pinIn${i}`, kind: 'marker', p: pin.x, color: 'rgba(230,237,243,0.5)', size: 3, ring: true });
         items.push({ id: `pinT${i}`, kind: 'marker', p: pin.y, color: col, size: 6, ring: true });
-        items.push({ id: `pinC${i}`, kind: 'marker', p: c, color: col, size: 4 });
+        items.push({ id: `pinC${i}`, kind: 'marker', p: c, color: col, size: 4, rotated: true });
         if (vd === 2) items.push({ kind: 'label', p: pin.y, text: `pin ${i + 1}`, color: col });
       });
     }
@@ -550,15 +603,28 @@
       const p = posCache.get(id_);
       for (let i = 0; i < id_.pts.length; i++) {
         const c = Array.from(p.subarray(i * vd, (i + 1) * vd));
-        items.push({ id: `interf${i}`, kind: 'marker', p: c, color: 'rgba(230,237,243,0.9)', size: 5, ring: true });
-        if (vd === 2) items.push({ kind: 'label', p: c, text: String(i + 1), color: '#e6edf3' });
+        items.push({ id: `interf${i}`, kind: 'marker', p: c, color: 'rgba(230,237,243,0.9)', size: 5, ring: true, rotated: true });
+        if (vd === 2) items.push({ kind: 'label', p: c, text: String(i + 1), color: '#e6edf3', rotated: true });
       }
     }
     // probe point used by the sensitivity panel
     const pr = traces.ds.find((d) => d.role === 'probe');
-    if (pr) items.push({ id: 'probe', kind: 'marker', p: Array.from(posCache.get(pr)), color: '#ffd666', size: 5, ring: true });
+    if (pr) items.push({ id: 'probe', kind: 'marker', p: Array.from(posCache.get(pr)), color: '#ffd666', size: 5, ring: true, rotated: true });
     // shape currently being drawn
     if (drawing) items.push(...drawingPreview());
+    if (tilted()) {                      // everything not taken from the traced objects sits in the output plane (depth 0)
+      const rot = (p) => camXY(p[0], p[1], 0);
+      for (let i = items.length - 1; i >= 0; i--) {
+        const it = items[i];
+        if (it.kind === 'ellipses' || it.kind === 'image') items.splice(i, 1);
+        else if ((it.kind === 'line' || it.kind === 'points') && !it.fromDrawable) {
+          const q = new Float64Array(it.pts.length);
+          for (let k = 0; k < q.length; k += 2) { const r = rot([it.pts[k], it.pts[k + 1]]); q[k] = r[0]; q[k + 1] = r[1]; }
+          it.pts = q;
+        } else if ((it.kind === 'marker' || it.kind === 'label') && !it.rotated) it.p = rot(it.p);
+        else if (it.kind === 'arrow' && !it.rotated) { if (!it.fromRotated) it.from = rot(it.from); it.to = rot(it.to); }
+      }
+    }
     return { items, atInput, atOutput };
   }
 
@@ -568,15 +634,40 @@
    * red point (−1, 0) — or, for logits, v = (logit₁ − logit₂)/4.  v = +1 → full blue, −1 → full red,
    * 0 → dark (halfway); values beyond ±1 stay fully coloured.
    */
-  function backgroundImage() {
-    const box = viz2.viewBox(), key = box.map((v) => v.toFixed(3)).join() + netVersion + trainer.step_;
+  /**
+   * Network from stage s to the output.  s = 0: the input; odd s = after layer l's linear step (apply σ_l,
+   * then layers l+1..L); even s = after layer l's activation.  A 2D view point p stands for a point of the
+   * stage space: exact when the stage is 2D, on the PCA plane through the points when it is wider.
+   */
+  function restOfNetwork(s, p) {
+    // the view point p = B·x; the closest point of the PCA plane through the cloud's mean m is m + Bᵀ(p − B·m)
+    const P = traces.bases[s], B = P.basis, m = P.mean, dim = B[0].length;
+    const bm = [0, 1].map((k) => { let v = 0; for (let j = 0; j < dim; j++) v += B[k][j] * m[j]; return v; });
+    let a = new Float64Array(dim);
+    for (let j = 0; j < dim; j++) a[j] = m[j] + B[0][j] * (p[0] - bm[0]) + B[1][j] * (p[1] - bm[1]);
+    let l = Math.ceil(s / 2);                                // layer whose output (or linear part) this is
+    if (s % 2 === 1) { const f = NN.ACTIVATIONS[net.acts[l - 1]].f; a = a.map(f); }
+    for (; l < net.nLayers; l++) {
+      const L = net.layout[l], th = net.theta, f = NN.ACTIVATIONS[net.acts[l]].f, out = new Float64Array(L.nout);
+      for (let i = 0; i < L.nout; i++) {
+        let v = th[L.b + i];
+        for (let j = 0; j < L.nin; j++) v += th[L.w + i * L.nin + j] * a[j];
+        out[i] = f(v);
+      }
+      a = out;
+    }
+    return a;
+  }
+
+  function backgroundImage(stage = 0) {
+    const box = viz2.viewBox(), key = box.map((v) => v.toFixed(3)).join() + netVersion + trainer.step_ + '|' + stage;
     if (bgCache && bgCache.key === key) return bgCache.item;
     const W = 90, H = Math.max(10, Math.round((W * (box[3] - box[1])) / (box[2] - box[0])));
     const rgba = new Uint8ClampedArray(W * H * 4), blue = [88, 166, 255], red = [255, 107, 107];
     for (let j = 0; j < H; j++) {
       for (let i = 0; i < W; i++) {
         const x = box[0] + ((i + 0.5) * (box[2] - box[0])) / W, y = box[3] - ((j + 0.5) * (box[3] - box[1])) / H;
-        const o = net.predict([x, y]);
+        const o = stage === 0 ? net.predict([x, y]) : restOfNetwork(stage, [x, y]);
         const raw = isClassify() ? (o[0] - o[1]) / 4 : o[0];
         const v = Math.max(-1, Math.min(1, Number.isFinite(raw) ? raw : 0));
         const col = v >= 0 ? blue : red, k = 4 * (j * W + i);
@@ -584,7 +675,19 @@
         rgba[k + 3] = Math.round(150 * Math.abs(v));      // brightness ∝ |v|: dark near the halfway line
       }
     }
-    bgCache = { key, item: { kind: 'image', bbox: box, w: W, h: H, rgba } };
+    // in a wide stage the picture is a 2D slice: say how often it agrees with the network on the data points
+    let agree = null;
+    const dd = traces.ds.find((x) => x.role === 'data');
+    if (stage > 0 && !traces.bases[stage].exact && dd && dd.st.length) {
+      let ok = 0;
+      for (let i = 0; i < dd.st.length; i++) {
+        const o = restOfNetwork(stage, [dd.proj[stage][2 * i], dd.proj[stage][2 * i + 1]]), y = net.predict(dd.pts[i]);
+        const side = (v) => (isClassify() ? v[0] - v[1] : v[0]) > 0;
+        if (side(o) === side(y)) ok++;
+      }
+      agree = ok / dd.st.length;
+    }
+    bgCache = { key, agree, item: { kind: 'image', bbox: box, w: W, h: H, rgba } };
     return bgCache.item;
   }
 
@@ -688,7 +791,13 @@
     $('ticks').textContent = `stage ${t.toFixed(2)} / ${n - 1}`;
     $('play').textContent = playing ? '⏸' : '▶';
     const P = traces.bases[Math.min(n - 1, Math.max(0, s))];
-    if (P && !P.exact) $('stageLabel').innerHTML += `<br><span class="tag">PCA view: ${(100 * P.explained).toFixed(0)}% of variance</span>`;
+    if (P && !P.exact) {
+      const D3 = depthInfo[Math.min(n - 1, Math.max(0, s))];
+      const pct = (v) => (v >= 0.9995 ? '100' : v > 0.99 ? (Math.floor(1000 * v) / 10).toFixed(1) : (100 * v).toFixed(0));
+      $('stageLabel').innerHTML += `<br><span class="tag">ℝ${P.basis[0].length} shown through PCA: ${pct(P.explained)}% of the spread in 2 directions${
+        D3 ? `, ${pct(D3.explained)}% with depth — right-drag to tilt` : ''}</span>`;
+    }
+    if (tilted()) $('stageLabel').innerHTML += '<br><span class="tag">tilted view · double-click or ⟲ Flat to look straight down</span>';
   }
 
   // ===========================================================================
@@ -730,7 +839,7 @@
   // ===========================================================================
 
   const TOOLS2 = [
-    ['pan', 'Pan', 'Drag to move the view, wheel to zoom.'],
+    ['pan', 'Pan', 'Drag to move the view, wheel to zoom, right-drag to tilt (wide layers).'],
     ['curve', 'Curve', 'Draw a freehand curve (drawn in input space).'],
     ['circle', 'Circle', 'Press at the centre and drag out the radius.'],
     ['region', 'Region', 'Draw a closed outline; it is filled with points.'],
@@ -862,12 +971,14 @@
 
   function bind2DMouse() {
     const cv = $('c2d');
-    let pan = null;
+    let pan = null, orbit = null;
     cv.addEventListener('contextmenu', (e) => e.preventDefault());
     cv.addEventListener('pointerdown', (e) => {
       const r = cv.getBoundingClientRect(), px = e.clientX - r.left, py = e.clientY - r.top, w = viz2.toWorld(px, py);
-      cv.setPointerCapture(e.pointerId);
+      try { cv.setPointerCapture(e.pointerId); } catch (err) { /* synthetic events have no capturable pointer */ }
+      if (e.button === 2 && S.display.lift) { orbit = { x: e.clientX, y: e.clientY }; return; }
       if (e.button !== 0 || tool === 'pan') { pan = { x: e.clientX, y: e.clientY }; return; }
+      if (tilted()) { cam.yaw = 0; cam.pitch = 0; }          // drawing happens on the flat input plane
       if (tool === 'curve' || tool === 'region') { t = 0; anim = null; drawing = { type: tool, pts: [w] }; }
       else if (tool === 'circle') { t = 0; anim = null; drawing = { type: 'circle', c: w, r: 0 }; }
       else if (tool === 'pin') drawing = { type: 'pin', x: w, y: w.slice() };
@@ -880,6 +991,12 @@
         if (Math.hypot(w[0] - drawing.last[0], w[1] - drawing.last[1]) * viz2.scale > 6) { spray(w, drawing.label); drawing.last = w; }
         return;
       }
+      if (orbit) {
+        cam.yaw = Math.max(-1.5, Math.min(1.5, cam.yaw + 0.008 * (e.clientX - orbit.x)));
+        cam.pitch = Math.max(-1.5, Math.min(1.5, cam.pitch + 0.008 * (e.clientY - orbit.y)));
+        orbit.x = e.clientX; orbit.y = e.clientY;
+        return;
+      }
       if (pan) { viz2.panBy(e.clientX - pan.x, e.clientY - pan.y); pan.x = e.clientX; pan.y = e.clientY; userMovedView(); return; }
       if (!drawing) return;
       if (drawing.type === 'circle') drawing.r = Math.hypot(w[0] - drawing.c[0], w[1] - drawing.c[1]);
@@ -889,9 +1006,10 @@
         if (Math.hypot(w[0] - last[0], w[1] - last[1]) * viz2.scale > 2) drawing.pts.push(w);
       }
     });
-    const up = () => { pan = null; finishDrawing(); };
+    const up = () => { pan = null; orbit = null; finishDrawing(); };
     cv.addEventListener('pointerup', up);
-    cv.addEventListener('pointercancel', () => { pan = null; drawing = null; });
+    cv.addEventListener('pointercancel', () => { pan = null; orbit = null; drawing = null; });
+    cv.addEventListener('dblclick', () => { if (tilted()) flatView(); });
     cv.addEventListener('wheel', (e) => {
       e.preventDefault();
       const r = cv.getBoundingClientRect();
@@ -1225,11 +1343,13 @@
     $('seed').onchange = (e) => { S.net.init.seed = Math.max(0, Math.round(+e.target.value || 0)); rebuildNet(); };
     $('resample').onclick = () => { S.net.init.seed++; $('seed').value = S.net.init.seed; rebuildNet(); };
 
-    for (const k of ['grid', 'circle', 'basis', 'origin', 'jac', 'det', 'dist', 'autoFit']) {
+    for (const k of ['grid', 'circle', 'basis', 'origin', 'jac', 'det', 'dist', 'autoFit', 'bg', 'lift']) {
       const el = $('show' + k[0].toUpperCase() + k.slice(1)) || $(k);
       el.onchange = () => { S.display[k] = el.checked; invalidate(); };
     }
     $('fitBtn').onclick = fitView;
+    $('flatBtn').onclick = flatView;
+    $('showLift').addEventListener('change', () => { if (!S.display.lift) flatView(); });
     $('resetView').onclick = () => { viz2.cx = viz2.cy = 0; viz2.scale = Math.min(viz2.w, viz2.h) / 6; if (viz3) { viz3.orbit = { theta: 0.8, phi: 1.1, radius: 7 }; viz3.target.set(0, 0, 0); } };
 
     $('target').onchange = (e) => { S.train.target = e.target.value; training = false; onTargetChange(); };
@@ -1550,7 +1670,7 @@
     renderNetNote();
     $('initDist').value = S.net.init.dist;
     $('seed').value = S.net.init.seed;
-    for (const k of ['grid', 'circle', 'basis', 'origin', 'jac', 'det', 'dist', 'autoFit']) {
+    for (const k of ['grid', 'circle', 'basis', 'origin', 'jac', 'det', 'dist', 'autoFit', 'bg', 'lift']) {
       const el = $('show' + k[0].toUpperCase() + k.slice(1)) || $(k);
       el.checked = !!S.display[k];
     }
@@ -2146,7 +2266,7 @@
       get t() { return t; }, set t(v) { t = v; }, setTool, finishDrawing, get traces() { return traces; },
       serializeState, get training() { return training; }, set training(v) { training = v; }, viz2,
       selectLayer, get inspect() { return inspect; }, get history() { return history; }, applyGuided, recommendedArch, initFor,
-      animateTo, stageName, scrubTo, get playing() { return playing; } };
+      animateTo, stageName, scrubTo, get playing() { return playing; }, restOfNetwork, computeTraces, get traces() { return traces; } };
   }
 
   init();
