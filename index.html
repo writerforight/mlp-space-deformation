@@ -13,6 +13,7 @@
   }
   * { box-sizing: border-box; }
   html, body { height: 100%; }
+  body { display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow: hidden; }   /* header (any height) + workspace */
   body {
     margin: 0; background: var(--bg); color: var(--text);
     font: 13px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -24,7 +25,7 @@
   header h1 { font-size: 15px; margin: 0 8px 0 0; font-weight: 650; letter-spacing: 0.01em; }
   header .spacer { flex: 1; }
   /* workspace: one big view; everything else opens on top of it or in the model strip below it */
-  #app { height: calc(100vh - 47px); min-height: 520px; }
+  #app { flex: 1; min-height: 0; }
   main { display: flex; flex-direction: column; height: 100%; min-width: 0; min-height: 0; }
   .scroll-thin { scrollbar-color: #30363d transparent; scrollbar-width: thin; }
   #view { position: relative; flex: 1; min-height: 300px; }
@@ -315,6 +316,26 @@
   button[data-tip], input[data-tip], select[data-tip] { cursor: pointer; }
   a { color: var(--accent); }
 
+  /* narrow screens: secondary header buttons go into ⋯ */
+  .hdr-narrow { display: none; }
+  .anchor-rel { position: relative; }
+  #morePop { position: fixed; right: 10px; top: 52px; width: 200px; z-index: 40; }
+  .more-list { display: flex; flex-direction: column; gap: 6px; padding: 10px; }
+  .more-list a { padding: 4px 10px; }
+  @media (max-width: 560px) { .lbl-long { display: none; } header h1 { font-size: 13px; } }
+  @media (max-width: 820px) {
+    .hdr-wide { display: none !important; }
+    .hdr-narrow { display: inline-block; }
+    header { gap: 8px; padding: 8px 10px; }
+    header h1 { font-size: 14px; }
+    .wz-brand { display: none; }
+    #modelStrip { gap: 8px; padding: 6px 8px; }
+    .ms-train { padding-left: 8px; }
+    #timeline { width: calc(100% - 24px); bottom: 70px; }
+    #gizmo { bottom: 124px; }
+    #tlStack { max-width: 62%; }
+    #legend { max-width: 45%; }
+  }
   @media (max-width: 900px) {
     #drawer { grid-template-columns: 1fr; max-height: 55vh; overflow-y: auto; }
     #drawer .col { border-left: none; border-top: 1px solid var(--line); overflow: visible; }
@@ -454,15 +475,26 @@
     <button id="dim2" class="on">2D</button><button id="dim3">3D</button>
   </span>
   <span class="spacer"></span>
-  <button id="recommendBtn" class="primary" data-tip="Apply settings that work well for the current task and data (layers, width, activations, init, optimiser) and fit the view. Nothing else changes your settings automatically.">★ Recommended</button>
-  <button id="analysisBtn" data-sheet="analysis" data-tip="Loss, forgetting, interference, sensitivity and invertibility.">Analysis</button>
-  <button id="expBtn" data-sheet="experiments" data-tip="Ready-made topology experiments: what a network can and cannot do.">Experiments</button>
-  <button id="exportBtn" data-tip="Download the full setup (architecture, seed, weights, objects, pins, settings) as JSON.">Export JSON</button>
-  <button id="importBtn" data-tip="Load a setup exported with “Export JSON”.">Import JSON</button>
+  <button id="recommendBtn" class="primary" data-tip="Apply settings that work well for the current task and data (layers, width, activations, init, optimiser) and fit the view. Nothing else changes your settings automatically.">★<span class="lbl-long"> Recommended</span></button>
+  <button class="hdr-wide" id="analysisBtn" data-sheet="analysis" data-tip="Loss, forgetting, interference, sensitivity and invertibility.">Analysis</button>
+  <button class="hdr-wide" id="expBtn" data-sheet="experiments" data-tip="Ready-made topology experiments: what a network can and cannot do.">Experiments</button>
+  <button class="hdr-wide" id="exportBtn" data-tip="Download the full setup (architecture, seed, weights, objects, pins, settings) as JSON.">Export JSON</button>
+  <button class="hdr-wide" id="importBtn" data-tip="Load a setup exported with “Export JSON”.">Import JSON</button>
   <input id="importFile" type="file" accept="application/json,.json" class="hidden">
-  <button id="guideBtn" data-tip="Open the step-by-step start again: dimension, problem, data, network.">Guided start</button>
+  <button class="hdr-wide" id="guideBtn" data-tip="Open the step-by-step start again: dimension, problem, data, network.">Guided start</button>
   <button id="helpBtn" data-tip="Quick guide and keyboard shortcuts">?</button>
-  <a href="https://github.com/writerforight/mlp-space-deformation" target="_blank" rel="noopener">GitHub</a>
+  <a class="hdr-wide" href="https://github.com/writerforight/mlp-space-deformation" target="_blank" rel="noopener">GitHub</a>
+  <span class="hdr-narrow anchor-rel">
+    <button id="moreBtn" data-pop="morePop" aria-label="More">⋯</button>
+    <div id="morePop" class="pop hidden">
+      <div class="pop-body more-list">
+        <button data-proxy="analysisBtn">Analysis</button><button data-proxy="expBtn">Experiments</button>
+        <button data-proxy="exportBtn">Export JSON</button><button data-proxy="importBtn">Import JSON</button>
+        <button data-proxy="guideBtn">Guided start</button>
+        <a href="https://github.com/writerforight/mlp-space-deformation" target="_blank" rel="noopener">GitHub</a>
+      </div>
+    </div>
+  </span>
   <div id="helpPanel" class="hidden">
     <div class="help-title">Quick guide</div>
     <ol>
