@@ -959,16 +959,21 @@
       const b = document.createElement('button');
       b.textContent = label; b.dataset.tip = tip;
       b.className = tool === id ? 'on' : '';
-      b.onclick = () => setTool(id);
+      b.disabled = id === 'pan' && tool === 'pan';          // already in the normal mode
+      b.onclick = () => setTool(tool === id ? 'pan' : id);  // the active tool again = back to normal
       tb.appendChild(b);
     }
     const tip = toolList().find((x) => x[0] === tool);
     $('hint').textContent = tip ? tip[2] : '';
+    const active = tool !== 'pan' && tip;
+    $('toolChip').classList.toggle('hidden', !active);
+    if (active) $('toolChip').innerHTML = `<b>${tip[1]}</b> tool <span class="tag">— click here, the tool again, or Esc to stop</span> ✕`;
     $('toolNote').textContent = S.dim === 2 ? 'Pick a tool, then draw on the view. Pan moves the view.' : 'Pick a tool and draw on a sphere, or add a sphere under Drawing settings.';
   }
 
   function setTool(id) {
     tool = id;
+    if (id === 'pan') drawing = null;
     if (id === 'pin') {
       if (S.train.target !== 'pins') { S.train.target = 'pins'; $('target').value = 'pins'; onTargetChange(); }
       if (traces) animateTo(traces.nStages - 1);
@@ -1474,10 +1479,12 @@
     $('modeJoint').onclick = () => { S.train.mode = 'joint'; syncModeUI(); rebuildTrainer(); };
     $('modeSeq').onclick = () => { S.train.mode = 'sequential'; syncModeUI(); rebuildTrainer(); };
     $('trainPlay').onclick = () => {
+      if (!training) branchFromView();
       if (!training && trainer.done) rebuildTrainerKeepWeights();
       training = !training; updateTrainStatus();
     };
-    $('trainStep').onclick = () => { training = false; trainSteps(1); invalidate(); netVersion++; };
+    $('toolChip').onclick = () => setTool('pan');
+    $('trainStep').onclick = () => { training = false; branchFromView(); trainSteps(1); invalidate(); netVersion++; };
     $('trainReset').onclick = () => { training = false; rebuildNet(); };
     $('matrixKind').onchange = (e) => { S.analysis.matrix = e.target.value; invalidate(); };
 
@@ -2252,7 +2259,46 @@
   let history = [], lastInspector = 0;
 
   /** Weight snapshots for the history chart (decimated to at most ~400 points). */
-  function resetHistory() { history = net ? [{ step: trainer ? trainer.step_ : 0, theta: Float64Array.from(net.theta) }] : []; }
+  function resetHistory() {
+    history = net ? [{ step: trainer ? trainer.step_ : 0, theta: Float64Array.from(net.theta) }] : [];
+    liveTheta = null; viewIdx = null;
+  }
+
+  /*
+   * Training timeline: the snapshots in `history` are frames of a video.  showHistory(i) puts frame i's
+   * weights into the network (the live weights are kept aside); backToLive() restores them.  Training or
+   * stepping from an old frame continues from there: later frames are dropped, like recording over a tape.
+   */
+  let liveTheta = null, viewIdx = null;
+  function showHistory(i) {
+    if (history.length < 2) return;
+    i = Math.max(0, Math.min(history.length - 1, Math.round(i)));
+    if (liveTheta === null) liveTheta = Float64Array.from(net.theta);
+    training = false;
+    viewIdx = i;
+    net.theta.set(history[i].theta);
+    netVersion++; invalidate(); inspect.key = '';
+    updateTrainStatus(`watching step ${history[i].step} of ${history[history.length - 1].step} · ● live returns · ▶ Train continues from here`);
+  }
+  function backToLive() {
+    if (liveTheta === null) return;
+    net.theta.set(liveTheta);
+    liveTheta = null; viewIdx = null;
+    netVersion++; invalidate(); inspect.key = '';
+    updateTrainStatus();
+  }
+  /** Continue training from the frame being watched. */
+  function branchFromView() {
+    if (viewIdx === null) return;
+    const step = history[viewIdx].step;
+    history = history.slice(0, viewIdx + 1);
+    trainer.lossHistory.length = Math.max(0, Math.min(trainer.lossHistory.length, trainer.lossHistory.length - (trainer.step_ - step)));
+    trainer.step_ = step;
+    const o = trainer.opts;                                  // fresh optimizer state for the old weights
+    trainer.optim = o.optimizer === 'sgd' ? new NN.SGD(net.nParams, o.lr) : new NN.Adam(net.nParams, o.lr);
+    trainer.done = false; trainer.diverged = false;
+    liveTheta = null; viewIdx = null;
+  }
   function pushHistory() {
     if (!net) return;
     const step = trainer ? trainer.step_ : 0;
@@ -2442,6 +2488,9 @@
 
   function setupShortcuts() {
     document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && tool !== 'pan' && !document.body.classList.contains('wizard-open')) {
+        setTool('pan'); e.stopImmediatePropagation(); return;
+      }
       const tag = (e.target.tagName || '').toLowerCase();
       if (tag === 'input' || tag === 'select' || tag === 'textarea' || e.ctrlKey || e.metaKey || e.altKey) return;
       if (document.body.classList.contains('wizard-open')) return;
@@ -2479,7 +2528,8 @@
       get t() { return t; }, set t(v) { t = v; }, setTool, finishDrawing, get traces() { return traces; },
       serializeState, get training() { return training; }, set training(v) { training = v; }, viz2,
       selectLayer, get inspect() { return inspect; }, get history() { return history; }, applyGuided, recommendedArch, initFor,
-      animateTo, stageName, scrubTo, get playing() { return playing; }, restOfNetwork, computeTraces, get traces() { return traces; } };
+      animateTo, stageName, scrubTo, get playing() { return playing; }, showHistory, backToLive,
+      get viewIdx() { return viewIdx; }, get historySteps() { return history.map((h) => h.step); }, restOfNetwork, computeTraces, get traces() { return traces; } };
   }
 
   init();

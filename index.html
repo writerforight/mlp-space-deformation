@@ -92,8 +92,13 @@
   .pipe .marker { position: absolute; left: -4px; bottom: 1px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent);
     box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.25); pointer-events: none; }
   button.mini { padding: 4px 7px; }
+  #toolChip { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 5; border-radius: 16px; padding: 5px 12px;
+    background: rgba(31, 111, 235, 0.25); border: 1px solid var(--accent); }
+  #toolbar button.on:disabled { opacity: 1; cursor: default; }
+  #lossSpark { cursor: ew-resize; }
+  #liveBtn { color: #ff6b6b; border-color: #ff6b6b; }
   .spark { display: inline-flex; flex-direction: column; align-items: center; gap: 0; }
-  #lossSpark { width: 90px; height: 20px; display: block; }
+  #lossSpark { width: 150px; height: 22px; display: block; }
   #lossVal { font-size: 10px; font-variant-numeric: tabular-nums; }
   .ms-train { display: flex; align-items: center; gap: 8px; padding-left: 14px; border-left: 1px solid var(--line); }
   #drawerBtn.on { background: var(--panel2); border-color: var(--accent); }
@@ -423,6 +428,7 @@
       <div id="stageLabel"></div>
       <div id="legend" class="hidden"></div>
       <div id="hint"></div>
+      <button id="toolChip" class="hidden" data-tip="Back to the normal mode (pan the view)."></button>
 
       <!-- top right: how to look -->
       <div class="anchor tr">
@@ -461,7 +467,7 @@
 
       <!-- bottom left: what is in space (input) -->
       <div class="anchor bl">
-        <div id="objPop" class="pop up hidden">
+        <div id="objPop" class="pop up hidden" data-sticky="1">
           <div class="pop-head"><b>Objects</b><span class="sec-info" id="sumObjects"></span><button class="x" data-close>✕</button></div>
           <div class="pop-body">
             <div class="group-label">Add a shape</div>
@@ -715,7 +721,9 @@
       </div>
       <div class="ms-train">
         <button id="trainPlay" class="primary" data-tip="Start / pause training (key T).">▶ Train</button>
-        <span class="spark" data-tip="Loss of the last training steps (log scale). Full chart: Analysis."><canvas id="lossSpark"></canvas><span id="lossVal" class="tag"></span></span>
+        <span class="spark" data-tip="Training timeline: the loss over all steps (log scale). Drag on it to see the network at any earlier step, like a video."><canvas id="lossSpark"></canvas><span id="lossVal" class="tag"></span></span>
+        <button id="replayBtn" class="mini" data-tip="Replay the training from the start, like a video.">⏵</button>
+        <button id="liveBtn" class="mini hidden" data-tip="Back to the current weights.">● live</button>
         <button id="drawerBtn" data-tip="Network, goal and training settings.">Model ▲</button>
       </div>
     </div>

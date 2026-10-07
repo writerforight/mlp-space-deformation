@@ -4,8 +4,8 @@
 
    Every half of a block is one stage of the animation (W = the linear step, the right half = the
    activation).  Click a stage to go there, drag along the strip to scrub, ⓘ opens the layer inspector.
-   A marker shows where the view is right now, also between stages.  The loss sparkline next to ▶ Train
-   shows the last few hundred training steps (log scale).
+   A marker shows where the view is right now, also between stages.  Next to ▶ Train the loss of the whole
+   run doubles as a training timeline: drag on it to see the network at an earlier step, ⏵ replays it.
 */
 (function () {
   'use strict';
@@ -86,32 +86,89 @@
   window.addEventListener('pointerup', () => { drag = null; setTimeout(() => { dragged = false; }, 0); });
   window.addEventListener('resize', () => requestAnimationFrame(() => { measure(); lastT = -1; }));
 
-  // ---- loss sparkline -----------------------------------------------------------------------------------
+  // ---- training timeline: the loss over all steps; drag on it to watch the network at an earlier step -----
   const spark = $('lossSpark');
   let sparkKey = '';
   function drawSpark() {
-    const T = App.trainer, hist = T ? T.lossHistory : [];
-    const key = `${hist.length}|${spark.clientWidth}`;
+    const T = App.trainer, hist = T ? T.lossHistory : [], steps = App.historySteps, vi = App.viewIdx;
+    const key = `${hist.length}|${spark.clientWidth}|${vi}|${steps.length}`;
     if (key === sparkKey) return;
     sparkKey = key;
+    $('liveBtn').classList.toggle('hidden', vi === null);
+    $('replayBtn').disabled = steps.length < 2;
     const w = spark.clientWidth, h = spark.clientHeight, dpr = window.devicePixelRatio || 1;
     if (!w) return;
     spark.width = Math.round(w * dpr); spark.height = Math.round(h * dpr);
     const ctx = spark.getContext('2d');
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
-    const ys = hist.slice(-400).filter((v) => v > 0 && Number.isFinite(v)).map(Math.log10);
-    $('lossVal').textContent = hist.length ? `loss ${hist[hist.length - 1].toPrecision(2)}` : 'loss –';
-    if (ys.length < 2) return;
-    const lo = Math.min(...ys), hi = Math.max(...ys), span = hi - lo || 1;
+    const last = T ? T.step_ : 0, first = last - hist.length;     // lossHistory[k] is the loss of step first + k + 1
+    $('lossVal').textContent = vi !== null ? `step ${steps[vi]} / ${steps[steps.length - 1]}`
+      : hist.length ? `loss ${hist[hist.length - 1].toPrecision(2)}` : 'loss –';
+    if (hist.length < 2) return;
+    // one value per pixel column (the mean of the log-loss in that column), over the whole run
+    const cols = Math.max(2, Math.floor(w)), ys = new Array(cols).fill(null), cnt = new Array(cols).fill(0);
+    for (let k = 0; k < hist.length; k++) {
+      const v = hist[k];
+      if (!(v > 0) || !Number.isFinite(v)) continue;
+      const c = Math.min(cols - 1, Math.floor((k / (hist.length - 1)) * (cols - 1)));
+      ys[c] = (ys[c] || 0) + Math.log10(v); cnt[c]++;
+    }
+    const pts = ys.map((v, c) => (cnt[c] ? [c, v / cnt[c]] : null)).filter(Boolean);
+    const lo = Math.min(...pts.map((p) => p[1])), hi = Math.max(...pts.map((p) => p[1])), span = hi - lo || 1;
     ctx.strokeStyle = '#58a6ff'; ctx.lineWidth = 1.4;
     ctx.beginPath();
-    ys.forEach((v, i) => {
-      const x = (i / (ys.length - 1)) * (w - 2) + 1, y = h - 2 - ((v - lo) / span) * (h - 4);
+    pts.forEach(([c, v], i) => {
+      const x = (c / (cols - 1)) * (w - 2) + 1, y = h - 2 - ((v - lo) / span) * (h - 4);
       if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y);
     });
     ctx.stroke();
+    if (vi !== null && last > first) {                    // where we are in the video
+      const x = 1 + ((steps[vi] - first) / (last - first)) * (w - 2);
+      ctx.fillStyle = 'rgba(13,17,23,0.55)'; ctx.fillRect(x, 0, w - x, h);   // the "future" is dimmed
+      ctx.strokeStyle = '#ff6b6b'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+    }
   }
+
+  /** x on the timeline -> the nearest weight snapshot. */
+  function frameAtX(clientX) {
+    const steps = App.historySteps, T = App.trainer;
+    if (steps.length < 2 || !T) return null;
+    const r = spark.getBoundingClientRect(), f = Math.max(0, Math.min(1, (clientX - r.left) / r.width));
+    const first = T.step_ - T.lossHistory.length, target = first + f * (T.step_ - first);
+    let best = 0;
+    for (let i = 1; i < steps.length; i++) if (Math.abs(steps[i] - target) < Math.abs(steps[best] - target)) best = i;
+    return best;
+  }
+  let scrubbing = false, replay = null;
+  spark.addEventListener('pointerdown', (e) => {
+    const i = frameAtX(e.clientX);
+    if (i === null) return;
+    stopReplay();
+    scrubbing = true;
+    App.showHistory(i);
+  });
+  window.addEventListener('pointermove', (e) => { if (scrubbing) { const i = frameAtX(e.clientX); if (i !== null && i !== App.viewIdx) App.showHistory(i); } });
+  window.addEventListener('pointerup', () => { scrubbing = false; });
+  $('liveBtn').onclick = () => { stopReplay(); App.backToLive(); };
+
+  // replay: walk through the snapshots in ~5 s, then return to the live weights
+  function stopReplay() { if (replay) { cancelAnimationFrame(replay.raf); replay = null; $('replayBtn').textContent = '⏵'; } }
+  $('replayBtn').onclick = () => {
+    if (replay) { stopReplay(); return; }
+    const n = App.historySteps.length;
+    if (n < 2) return;
+    const t0 = performance.now(), dur = Math.min(8000, Math.max(3000, n * 25));
+    $('replayBtn').textContent = '⏸';
+    replay = {};
+    (function tick(now) {
+      const u = Math.min(1, (now - t0) / dur);
+      App.showHistory(u * (n - 1));
+      if (u < 1) replay.raf = requestAnimationFrame(tick);
+      else { replay = null; $('replayBtn').textContent = '⏵'; App.backToLive(); }
+    })(t0);
+  };
+  $('trainPlay').addEventListener('click', stopReplay, true);
 
   // ---- every frame: rebuild if the network changed, move the marker, light up the current slot ----------
   function frame() {

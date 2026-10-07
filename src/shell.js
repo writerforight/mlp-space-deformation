@@ -58,8 +58,9 @@
     const sheet = e.target.closest('[data-sheet]');
     if (sheet) { openSheet(sheet.dataset.sheet); return; }
     if (e.target.closest('[data-close]')) { closeAll(); return; }
-    // a click outside an open popover closes it (sheets stay: the view is used while reading them)
-    if (open && open.kind === 'pop' && !open.el.contains(e.target)) closeAll();
+    // a click outside an open popover closes it — except "sticky" ones (Objects: you draw on the view while
+    // it is open) and sheets (the view is used while reading them)
+    if (open && open.kind === 'pop' && !open.el.dataset.sticky && !open.el.contains(e.target)) closeAll();
   });
 
   document.addEventListener('keydown', (e) => {
