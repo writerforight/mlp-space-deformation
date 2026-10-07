@@ -35,7 +35,7 @@
         overrides: [], init: { dist: 'he', scale: 1.6, seed: 2 } },
       objects: [],
       nPoints: 300,
-      display: { grid: true, circle: true, basis: true, origin: true, jac: false, det: false, dist: false, autoFit: false, bg: true, lift: true },
+      display: { grid: true, circle: true, basis: true, origin: true, jac: false, det: false, dist: false, autoFit: false, bg: true, lift: true, basisInfo: true, mats: false },
       train: { target: 'none', goals: [], dataset: 'moons', nData: 400, noise: 0.08, dataSeed: 0, transform: 'rotation', morph: MORPHS[dim][0].join('>'), amount: 0.9, optimizer: 'adam', lr: 0.01, batch: 32, stepsPerFrame: 5,
         redrawEvery: 10, mode: 'joint', stepsPerTask: 300, nTasks: 3, method: 'none', lambda: 100 },
       pins: [],
@@ -790,6 +790,74 @@
     return [(v >> 16 & 255) / 255, (v >> 8 & 255) / 255, (v & 255) / 255];
   };
 
+  // ---- top left: what the current layer does to the origin and the basis vectors ---------------------------
+  const SUBD = '₀₁₂₃₄₅₆₇₈₉';
+  const subN = (k) => String(k).split('').map((c) => SUBD[+c]).join('');
+  function fmtVec(v) {
+    const a = Array.from(v), f = (x) => (Math.abs(x) < 0.005 ? '0.00' : x.toFixed(2)).replace('-', '−');
+    return a.length <= 4 ? `(${a.map(f).join(', ')})` : `(${a.slice(0, 3).map(f).join(', ')}, … +${a.length - 3})`;   // hover shows all
+  }
+  let basisKey = '';
+  function renderBasisBox() {
+    const box = $('basisBox');
+    if (!S.display.basisInfo || !net) { box.classList.add('hidden'); return; }
+    const s = Math.round(t), key = `${s}|${netVersion}|${trainer ? trainer.step_ : 0}|${S.dim}`;
+    box.classList.remove('hidden');
+    if (key === basisKey) return;
+    basisKey = key;
+    const d = S.dim, pts = [new Float64Array(d)];
+    for (let i = 0; i < d; i++) { const e = new Float64Array(d); e[i] = 1; pts.push(e); }
+    const names = ['o', ...[...Array(d)].map((_, i) => `e${subN(i + 1)}`)], colors = ['#e6edf3', ...BASIS_COLORS];
+    const st = pts.map((p) => net.stages(p));
+    let head, cols, now;
+    if (s === 0) {
+      head = ['input x'];
+      cols = [0]; now = 0;
+    } else {
+      const l = Math.ceil(s / 2), act = net.acts[l - 1];
+      const sup = (k) => String(k).split('').map((c) => '⁰¹²³⁴⁵⁶⁷⁸⁹'[+c]).join('');
+      head = [l === 1 ? 'input x' : `a${subN(l - 1)} ∈ ℝ${sup(net.dims[l - 1])}`, `z = W${subN(l)}${l === 1 ? 'x' : `a${subN(l - 1)}`} + b${subN(l)}`, `${act === 'identity' ? 'linear' : act}(z)${l === net.nLayers ? ' = output' : ''}`];
+      cols = [2 * l - 2, 2 * l - 1, 2 * l]; now = s % 2 === 1 ? 1 : 2;
+    }
+    const title = s === 0 ? 'Origin and basis vectors before the network' : `Layer ${Math.ceil(s / 2)}: where o and the basis vectors go (real coordinates)`;
+    box.innerHTML = `<div class="bx-title">${title}</div><table><tr><th></th>${head.map((h, j) => `<th class="${j === now ? 'now' : ''}">${h}</th>`).join('')}</tr>${
+      st.map((row, i) => `<tr><td class="k" style="color:${colors[i]}">${names[i]}</td>${cols.map((c, j) => `<td class="${j === now ? 'now' : ''}" title="${Array.from(row[c]).map((x) => x.toFixed(4)).join(', ')}">${fmtVec(row[c])}</td>`).join('')}</tr>`).join('')}</table>`;
+  }
+
+  // ---- model drawer: the weight matrices as numbers ----------------------------------------------------------
+  const matOpen = new Set([1]);
+  let matKey = '', matAt = 0;
+  function renderMats(force) {
+    const box = $('matBox');
+    box.classList.toggle('hidden', !S.display.mats);
+    if (!S.display.mats || !net || !isOpen('matbox')) return;
+    const key = `${netVersion}|${trainer ? trainer.step_ : 0}|${net.nParams}`;
+    if (!force && (key === matKey || performance.now() - matAt < 300)) return;
+    matKey = key; matAt = performance.now();
+    let mx = 1e-9;
+    for (const v of net.theta) mx = Math.max(mx, Math.abs(v));
+    const cell = (v) => {
+      const a = (0.12 + 0.6 * Math.min(1, Math.abs(v) / mx)).toFixed(3);
+      const bg = v >= 0 ? `rgba(227,179,65,${a})` : `rgba(188,140,255,${a})`;
+      return `<span style="background:${bg}">${v.toFixed(2).replace('-', '−')}</span>`;
+    };
+    box.innerHTML = net.layout.map((L, l) => {
+      const act = net.acts[l], th = net.theta;
+      let g = '<span class="h"></span>' + [...Array(L.nin)].map((_, j) => `<span class="h">a${subN(j + 1)}</span>`).join('') + '<span class="gap"></span><span class="h">b</span>';
+      for (let i = 0; i < L.nout; i++) {
+        g += `<span class="h">z${subN(i + 1)}</span>`;
+        for (let j = 0; j < L.nin; j++) g += cell(th[L.w + i * L.nin + j]);
+        g += '<span class="gap"></span>' + cell(th[L.b + i]);
+      }
+      return `<details data-l="${l + 1}"${matOpen.has(l + 1) ? ' open' : ''}><summary><b>W${subN(l + 1)}</b> ${L.nout}×${L.nin} · ${act === 'identity' ? 'linear' : act}<span class="tag">${L.nout * (L.nin + 1)} numbers</span></summary>
+        <div class="mgrid" style="grid-template-columns: auto repeat(${L.nin}, auto) 6px auto">${g}</div></details>`;
+    }).join('');
+    box.querySelectorAll('details').forEach((dt) => dt.addEventListener('toggle', () => {
+      const l = +dt.dataset.l;
+      if (dt.open) matOpen.add(l); else matOpen.delete(l);
+    }));
+  }
+
   function render() {
     if (!traces) computeTraces();
     t = Math.min(traces.nStages - 1, Math.max(0, t));
@@ -798,6 +866,7 @@
     if (S.dim === 2) viz2.render(items);
     else render3D(items);
     renderStageUI();
+    renderBasisBox();
   }
 
   function render3D(items) {
@@ -1449,11 +1518,12 @@
     $('seed').onchange = (e) => { S.net.init.seed = Math.max(0, Math.round(+e.target.value || 0)); rebuildNet(); };
     $('resample').onclick = () => { S.net.init.seed++; $('seed').value = S.net.init.seed; rebuildNet(); };
 
-    for (const k of ['grid', 'circle', 'basis', 'origin', 'jac', 'det', 'dist', 'autoFit', 'bg', 'lift']) {
+    for (const k of ['grid', 'circle', 'basis', 'origin', 'jac', 'det', 'dist', 'autoFit', 'bg', 'lift', 'basisInfo', 'mats']) {
       const el = $('show' + k[0].toUpperCase() + k.slice(1)) || $(k);
       el.onchange = () => { S.display[k] = el.checked; invalidate(); };
     }
     $('fitBtn').onclick = fitView;
+    $('showMats').addEventListener('change', () => renderMats(true));
     $('flatBtn').onclick = flatView;
     $('showLift').addEventListener('change', () => { if (!S.display.lift) flatView(); });
     $('resetView').onclick = () => { viz2.cx = viz2.cy = 0; viz2.scale = Math.min(viz2.w, viz2.h) / 6; if (viz3) { viz3.orbit = { theta: 0.8, phi: 1.1, radius: 7 }; viz3.target.set(0, 0, 0); } };
@@ -1782,7 +1852,7 @@
     renderNetNote();
     $('initDist').value = S.net.init.dist;
     $('seed').value = S.net.init.seed;
-    for (const k of ['grid', 'circle', 'basis', 'origin', 'jac', 'det', 'dist', 'autoFit', 'bg', 'lift']) {
+    for (const k of ['grid', 'circle', 'basis', 'origin', 'jac', 'det', 'dist', 'autoFit', 'bg', 'lift', 'basisInfo', 'mats']) {
       const el = $('show' + k[0].toUpperCase() + k.slice(1)) || $(k);
       el.checked = !!S.display[k];
     }
@@ -2249,6 +2319,7 @@
     if (now - lastInspector > (training ? 120 : 60)) { lastInspector = now; try { renderInspectorAndNet(); } catch (err) { console.error(err); } }
     renderSummaries();
     updateObjLog(now);
+    renderMats(false);
     updateGoalLosses(false);
     if (analysisDirty && now - lastAnalysis > (training ? 700 : 150)) {
       analysisDirty = false; lastAnalysis = now;

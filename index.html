@@ -32,13 +32,35 @@
   #c2d { touch-action: none; }
   #c3d canvas { display: block; touch-action: none; }
   #toolbar { display: flex; gap: 4px; flex-wrap: wrap; margin: 4px 0 8px; }
+  /* top left: the stage, and what this layer does to the basis vectors */
+  #tlStack { position: absolute; top: 10px; left: 12px; z-index: 4; display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
+    max-width: min(460px, 45%); pointer-events: none; }
+  #basisBox { background: rgba(13, 17, 23, 0.82); border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px; font-size: 12px; }
+  #basisBox .bx-title { color: var(--muted); font-size: 11px; margin-bottom: 4px; }
+  #basisBox table { border-collapse: collapse; font: 11.5px ui-monospace, SFMono-Regular, Menlo, monospace; }
+  #basisBox th { color: var(--muted); font-weight: 500; text-align: left; padding: 1px 8px 3px 0; border: none; font-family: ui-sans-serif, system-ui, sans-serif; }
+  #basisBox td { text-align: left; padding: 1px 8px 1px 0; border: none; white-space: nowrap; color: var(--muted); }
+  #basisBox td.k { font-weight: 700; }
+  #basisBox td.now, #basisBox th.now { color: var(--text); }
+  #basisBox th.now { border-bottom: 1px solid var(--accent); }
+  /* weight matrices in the model drawer */
+  .mats details { border: 1px solid var(--line); border-radius: 6px; margin: 5px 0; background: var(--panel2); }
+  .mats summary { cursor: pointer; padding: 4px 8px; font-size: 12px; list-style: none; display: flex; gap: 8px; align-items: baseline; }
+  .mats summary::-webkit-details-marker { display: none; }
+  .mats summary::before { content: '›'; color: var(--muted); transition: transform 0.15s; display: inline-block; }
+  .mats details[open] summary::before { transform: rotate(90deg); }
+  .mats summary .tag { margin-left: auto; }
+  .mgrid { display: grid; gap: 2px; padding: 4px 8px 8px; overflow-x: auto; font: 10.5px ui-monospace, monospace; }
+  .mgrid span { min-width: 38px; padding: 2px 3px; text-align: right; border-radius: 3px; color: var(--text); }
+  .mgrid span.h { color: var(--muted); background: none !important; text-align: center; }
+  .mgrid span.gap { min-width: 6px; padding: 0; }
   #stageLabel {
-    position: absolute; top: 10px; left: 12px; text-align: left; pointer-events: none;
+    text-align: left; pointer-events: none;
     background: rgba(13, 17, 23, 0.7); padding: 4px 8px; border-radius: 6px;
   }
   #stageLabel b { font-size: 14px; }
-  #legend {
-    position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); width: max-content; max-width: min(640px, calc(100% - 260px)); pointer-events: none;
+  #legend {   /* top right, under View ▾: the top left holds the stage and the basis box, the bottom the timeline */
+    position: absolute; top: 52px; right: 12px; max-width: min(380px, 38%); pointer-events: none;
     background: rgba(13, 17, 23, 0.78); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; font-size: 12px;
   }
   #hint { position: absolute; bottom: 8px; left: 12px; color: var(--muted); pointer-events: none; font-size: 12px; }
@@ -108,7 +130,6 @@
   #timeline #replayBtn { border-radius: 50%; width: 30px; height: 30px; padding: 0; background: var(--accent2); border-color: var(--accent); }
   #lossSpark { flex: 1; min-width: 80px; height: 30px; display: block; }
   #lossVal { min-width: 92px; text-align: right; font-variant-numeric: tabular-nums; }
-  body.has-timeline #legend { bottom: 68px; }
   #lossVal { font-size: 10px; font-variant-numeric: tabular-nums; }
   .ms-train { display: flex; align-items: center; gap: 8px; padding-left: 14px; border-left: 1px solid var(--line); }
   #drawerBtn.on { background: var(--panel2); border-color: var(--accent); }
@@ -435,7 +456,10 @@
     <div id="view">
       <canvas id="c2d"></canvas>
       <div id="c3d" class="hidden"></div>
-      <div id="stageLabel"></div>
+      <div id="tlStack">
+        <div id="stageLabel"></div>
+        <div id="basisBox" class="hidden"></div>
+      </div>
       <div id="legend" class="hidden"></div>
       <div id="hint"></div>
       <button id="toolChip" class="hidden" data-tip="Back to the normal mode (pan the view)."></button>
@@ -467,6 +491,7 @@
           <label data-tip="Image of a small circle under the local Jacobian: shows local stretching, squashing and rotation."><input id="showJac" type="checkbox"> Jacobian ellipses</label>
           <label data-tip="Colour by the sign of det(J): green keeps orientation, violet is mirrored (a fold), grey is collapsed."><input id="showDet" type="checkbox"> det(J) sign</label>
           <label data-tip="Colour each point by how far it has moved from its input position."><input id="showDist" type="checkbox"> Distance moved</label>
+          <label data-tip="A box under the stage name: where o, e₁, e₂ (e₃) are before this layer, after its linear step and after its activation — in the layer's real coordinates."><input id="showBasisInfo" type="checkbox"> Basis vectors box</label>
           <label data-tip="Classification tasks: colour the background by where the rest of the network sends each spot (blue / red = the class that wins, dark = undecided). Shown at every stage; in a stage wider than 2 it is the PCA plane of that stage."><input id="showBg" type="checkbox"> Class background</label>
         </div>
         <div class="group-label">Wide layers (2D)</div>
@@ -620,6 +645,8 @@
     <div id="drawer" class="hidden">
       <section class="col" data-col="network">
         <h3>Network <span class="sec-info" id="sumNetwork"></span></h3>
+        <div class="checks single"><label data-tip="Every layer's weights W and biases b as numbers (gold +, violet −); click a layer to open it. Updates while training."><input id="showMats" type="checkbox"> Show the weight matrices</label></div>
+        <div id="matBox" class="mats hidden" data-sec="matbox"></div>
         <div class="row"><label data-tip="Number of layers; each layer is a linear map followed by an activation.">Layers</label>
           <input id="layers" type="range" min="1" max="8" step="1"><span class="val" id="layersVal"></span></div>
         <div class="row"><label data-tip="Width of the hidden layers. With width = input dimension every layer can be drawn directly; wider layers are shown through a PCA projection.">Hidden width</label>

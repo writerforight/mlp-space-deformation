@@ -42,6 +42,10 @@ One big view; everything else opens on demand, and one panel at a time (✕, Esc
 - **＋ Objects** (bottom left): ready-made shapes, drawing by hand, and a card per object (colour, size,
   position, number of points). **ⓘ How it changes** logs what every layer does to the object: length,
   stretch, signed area (mirrored when negative) and self-crossings.
+- **Basis vectors box** (top left, under the stage name): where the origin and e₁, e₂ (e₃) are before the
+  current layer, after its linear step and after its activation — in the layer's real coordinates, also
+  when the view shows a wide layer through PCA. **Model ▲ → Show the weight matrices** lists every `W` and
+  `b` as numbers (gold +, violet −), live while training.
 - **View ▾** (top right): overlays, the class background (at every stage: how the rest of the network
   classifies each spot), and for 2D a third principal direction of wide layers as depth — right-drag to
   tilt the view and see how a wide layer lifts points over each other.
