@@ -757,7 +757,7 @@
     }
     const tip = toolList().find((x) => x[0] === tool);
     $('hint').textContent = tip ? tip[2] : '';
-    $('toolNote').textContent = S.dim === 2 ? 'Draw with the tools on top of the view.' : 'Add spheres here or draw on a sphere with the toolbar.';
+    $('toolNote').textContent = S.dim === 2 ? 'Pick a tool, then draw on the view. Pan moves the view.' : 'Pick a tool and draw on a sphere, or add a sphere under Drawing settings.';
   }
 
   function setTool(id) {
@@ -1090,7 +1090,13 @@
     return a !== 0 && (a < 1e-3 || a >= 1e4) ? v.toExponential(2) : v.toFixed(a < 1 ? 4 : 3);
   }
 
-  const isOpen = (sec) => { const el = document.querySelector(`details[data-sec="${sec}"]`); return !el || el.open; };
+  /** Is a panel showing?  Closed <details> and panels in a hidden popover / sheet / drawer are skipped. */
+  const isOpen = (sec) => {
+    const el = document.querySelector(`[data-sec="${sec}"]`);
+    if (!el) return true;
+    if (el.tagName === 'DETAILS' && !el.open) return false;
+    return el.getClientRects().length > 0;
+  };
 
   function updateAnalysis() {
     if (isOpen('loss')) drawLoss();
@@ -1327,11 +1333,9 @@
     rebuildNet();
     syncControls();
     fitView();
-    const sec = document.querySelector(g.problem === 'none' ? 'details[data-sec="network"]' : 'details[data-sec="training"]');
-    if (sec) sec.open = true;
     flashHint(g.problem === 'none'
-      ? 'Press ▶ under the view (or Space) to send the grid through the network, layer by layer.'
-      : 'Press ▶ Train (or T) to start training, and watch the space bend.');
+      ? 'Press ▶ in the strip below (or Space) to send the grid through the network, layer by layer.'
+      : 'Press ▶ Train (bottom right, or T) to start training, and watch the space bend.');
   }
 
   // ===========================================================================
@@ -1800,8 +1804,7 @@
   function selectLayer(l, jump) {
     inspect.layer = Math.min(Math.max(1, l), net.nLayers);
     inspect.hover = null;
-    const det = document.querySelector('details[data-sec="inspector"]');
-    if (det && !det.open) det.open = true;
+    document.dispatchEvent(new CustomEvent('nsd:layer', { detail: inspect.layer }));   // the shell opens the inspector
     if (jump) animateTo(2 * inspect.layer);
     inspect.key = '';
   }
