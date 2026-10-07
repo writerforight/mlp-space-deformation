@@ -636,6 +636,16 @@
         pts: Float64Array.from(c.pts.flatMap((p) => Array.from(p))), closed: c.closed, color: '#e6edf3', alpha: 0.4, dash: [5, 5], width: 1.5, size: 1.2, noFit: true }));
     }
     // the decision boundary (equal logits) lives on the diagonal of the output plane
+    // the selected object: its box and resize handle, while it can be dragged (input step, flat 2D, Pan)
+    if (atInput && atInputFlat()) {
+      const o = S.objects.find((x) => x.id === selObj && !x.hidden);
+      if (o) {
+        const [x0, y0, x1, y1] = objBox(o), m = 0.04;
+        items.push({ kind: 'line', closed: true, pts: Float64Array.from([x0 - m, y0 - m, x1 + m, y0 - m, x1 + m, y1 + m, x0 - m, y1 + m]),
+          color: o.color, alpha: 0.7, dash: [4, 4], width: 1, noFit: true });
+        items.push({ kind: 'marker', p: [x1 + m, y0 - m], color: o.color, size: 5 });
+      }
+    }
     // my goals: target points (drag them at the output), and the shape an "object stays" goal keeps
     if (atOutput && isGoals()) {
       for (const g of S.train.goals) {
@@ -1141,7 +1151,17 @@
       try { cv.setPointerCapture(e.pointerId); } catch (err) { /* synthetic events have no capturable pointer */ }
       if (e.button === 2 && S.display.lift) { orbit = { x: e.clientX, y: e.clientY }; return; }
       if (e.button === 0) { const g = goalAt(px, py); if (g) { dragGoal = g; return; } }
-      if (e.button !== 0 || tool === 'pan') { pan = { x: e.clientX, y: e.clientY }; return; }
+      if (e.button === 0) {
+        const h = objectHit(px, py);
+        if (h) {
+          if (selObj !== h.o.id) { selObj = h.o.id; renderObjList(); }
+          ensureBase(h.o);
+          const c = h.o.base.c.map((v, k) => v + h.o.offset[k]);
+          dragObj = { o: h.o, mode: h.mode, start: w, off0: h.o.offset.slice(), s0: h.o.scale, c, d0: Math.hypot(w[0] - c[0], w[1] - c[1]) || 1e-6 };
+          return;
+        }
+      }
+      if (e.button !== 0 || tool === 'pan') { pan = { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, left: e.button === 0 }; return; }
       if (tilted()) { cam.yaw = 0; cam.pitch = 0; }          // drawing happens on the flat input plane
       if (tool === 'curve' || tool === 'region') { t = 0; anim = null; drawing = { type: tool, pts: [w] }; }
       else if (tool === 'circle') { t = 0; anim = null; drawing = { type: 'circle', c: w, r: 0 }; }
@@ -1154,6 +1174,17 @@
       if (drawing && drawing.type === 'paint') {
         if (Math.hypot(w[0] - drawing.last[0], w[1] - drawing.last[1]) * viz2.scale > 6) { spray(w, drawing.label); drawing.last = w; }
         return;
+      }
+      if (dragObj) {
+        const D = dragObj, o = D.o;
+        if (D.mode === 'move') { o.offset[0] = D.off0[0] + w[0] - D.start[0]; o.offset[1] = D.off0[1] + w[1] - D.start[1]; }
+        else o.scale = Math.max(0.1, Math.min(5, D.s0 * Math.hypot(w[0] - D.c[0], w[1] - D.c[1]) / D.d0));
+        applyEdit(o);
+        return;
+      }
+      if (!pan && !orbit && !drawing && !dragGoal) {             // cursor hints
+        const h = objectHit(e.clientX - r.left, e.clientY - r.top);
+        cv.style.cursor = h ? (h.mode === 'scale' ? 'nwse-resize' : 'move') : '';
       }
       if (dragGoal) {
         dragGoal.target[0] = +w[0].toFixed(2); dragGoal.target[1] = +w[1].toFixed(2);
@@ -1177,7 +1208,12 @@
         if (Math.hypot(w[0] - last[0], w[1] - last[1]) * viz2.scale > 2) drawing.pts.push(w);
       }
     });
-    const up = () => { pan = null; orbit = null; dragGoal = null; finishDrawing(); };
+    const up = () => {
+      if (dragObj) { dragObj = null; renderObjList(); }        // the card shows the new size and position
+      // a plain click on empty space (no drag) clears the object selection
+      if (pan && pan.left && Math.hypot(pan.x - pan.x0, pan.y - pan.y0) < 3 && selObj !== null && atInputFlat()) { selObj = null; renderObjList(); invalidate(); }
+      pan = null; orbit = null; dragGoal = null; finishDrawing();
+    };
     cv.addEventListener('pointerup', up);
     cv.addEventListener('pointercancel', () => { pan = null; orbit = null; drawing = null; });
     cv.addEventListener('dblclick', () => { if (tilted()) flatView(); });
@@ -1971,6 +2007,36 @@
       if (k === 'obj') g.obj = +el.value;
       renderGoals(); rebuildTrainer(); invalidate();
     });
+  }
+
+  /*
+   * Move and resize objects right on the view (2D, flat, at the input step, Pan tool): click an object's
+   * curve to select it (a dashed box appears), drag inside the box to move it, drag the corner square to
+   * resize it.  The object's card follows.
+   */
+  let dragObj = null;           // { o, mode: 'move' | 'scale', start: [x, y], off0, s0, c }
+  const atInputFlat = () => S.dim === 2 && !tilted() && t < 0.02 && tool === 'pan';
+  function objBox(o) {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const p of o.points) { x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]); }
+    return [x0, y0, x1, y1];
+  }
+  /** What is under the pointer: the selected object's corner handle, its box, or any object's curve. */
+  function objectHit(px, py) {
+    if (!atInputFlat()) return null;
+    const sel = S.objects.find((o) => o.id === selObj && !o.hidden);
+    if (sel) {
+      const [x0, y0, x1, y1] = objBox(sel), [hx, hy] = viz2.toScreen(x1, y0);
+      if (Math.abs(px - hx) < 9 && Math.abs(py - hy) < 9) return { o: sel, mode: 'scale' };
+      const [ax, ay] = viz2.toScreen(x0, y1), [bx, by] = viz2.toScreen(x1, y0);
+      if (px > ax - 4 && px < bx + 4 && py > ay - 4 && py < by + 4) return { o: sel, mode: 'move' };
+    }
+    for (let k = S.objects.length - 1; k >= 0; k--) {
+      const o = S.objects[k];
+      if (o.hidden) continue;
+      for (const p of o.points) { const [qx, qy] = viz2.toScreen(p[0], p[1]); if (Math.abs(qx - px) < 6 && Math.abs(qy - py) < 6) return { o, mode: 'move' }; }
+    }
+    return null;
   }
 
   /** Drag a goal's target point A at the output stage (2D, flat view). */
