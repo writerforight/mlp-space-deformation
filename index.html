@@ -142,6 +142,8 @@
   .pipe .marker { position: absolute; left: -4px; bottom: 1px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent);
     box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.25); pointer-events: none; }
   button.mini { padding: 4px 7px; }
+  #gizmo { position: absolute; right: 12px; bottom: 14px; z-index: 5; background: rgba(13, 17, 23, 0.8); border: 1px solid var(--line);
+    border-radius: 10px; font-family: ui-monospace, monospace; pointer-events: none; }
   #toolChip { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 5; border-radius: 16px; padding: 5px 12px;
     background: rgba(31, 111, 235, 0.25); border: 1px solid var(--accent); }
   #toolbar button.on:disabled { opacity: 1; cursor: default; }
@@ -492,6 +494,7 @@
       </div>
       <div id="legend" class="hidden"></div>
       <div id="hint"></div>
+      <svg id="gizmo" class="hidden" width="84" height="84" viewBox="0 0 84 84" aria-label="Axes of the tilted view"></svg>
       <button id="toolChip" class="hidden" data-tip="Back to the normal mode (pan the view)."></button>
 
       <!-- training timeline, like a video player's bar: the loss of the whole run; drag to go back in time -->

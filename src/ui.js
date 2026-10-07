@@ -446,12 +446,25 @@
         }
       };
       project();
-      if (!P.exact && s > 0) {            // align axis signs with the previous stage
-        const corr = new Float64Array(vd);
-        for (const d of ds) for (let i = 0; i < d.proj[s].length; i++) corr[i % vd] += d.proj[s][i] * d.proj[s - 1][i];
-        let flipped = false;
-        for (let a = 0; a < vd; a++) if (corr[a] < 0) { P.basis[a] = P.basis[a].map((v) => -v); flipped = true; }
-        if (flipped) project();
+      if (!P.exact && s > 0) {
+        // Turn the view plane to match the previous stage as well as possible (orthogonal Procrustes): with
+        // Y = this stage's view coordinates and Y' the previous one's, Yᵀ Y' = U S Vᵀ and the best rotation
+        // (or reflection) is R = U Vᵀ.  The plane stays the same — only its axes turn — so when two principal
+        // directions swap or flip between stages, the animation does not jump.
+        const M = [...Array(vd)].map(() => new Float64Array(vd));
+        for (const d of ds) {
+          const a = d.proj[s], b = d.proj[s - 1];
+          for (let i = 0; i < a.length; i += vd) for (let r = 0; r < vd; r++) for (let c = 0; c < vd; c++) M[r][c] += a[i + r] * b[i + c];
+        }
+        const { U, V } = NN.squareSvd(M);
+        const R = [...Array(vd)].map((_, i) => [...Array(vd)].map((__, j) => U.reduce((acc, u, k) => acc + u[i] * V[k][j], 0)));
+        const B = P.basis;
+        P.basis = [...Array(vd)].map((_, a) => {
+          const out = new Float64Array(B[0].length);
+          for (let c = 0; c < vd; c++) for (let j = 0; j < out.length; j++) out[j] += R[c][a] * B[c][j];
+          return out;
+        });
+        project();
       }
       bases.push(P);
       // 2D mode, layer wider than 2: the third principal direction becomes depth (seen when the view is tilted)
@@ -528,6 +541,21 @@
       }
     }
     return out;
+  }
+
+  /** Small axes in the corner while the view is tilted: which way the two view directions and depth point. */
+  function renderGizmo(depth, pca) {
+    const g = $('gizmo');
+    g.classList.toggle('hidden', !tilted());
+    if (!tilted()) return;
+    const c = 42, k = 28, names = pca ? ['PC1', 'PC2', depth ? 'PC3' : 'depth'] : ['x', 'y', 'depth'];
+    const cols = ['#ff6b6b', '#51cf66', '#4dabf7'];
+    const ax = [[1, 0, 0], [0, 1, 0], [0, 0, 1]].map((v) => camXY(v[0], v[1], v[2]));
+    g.innerHTML = ax.map((q, i) => {
+      const x = c + k * q[0], y = c - k * q[1];
+      return `<line x1="${c}" y1="${c}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" stroke="${cols[i]}" stroke-width="2" stroke-linecap="round"${i === 2 && !depth ? ' stroke-dasharray="3 3"' : ''}/>
+        <text x="${(c + (k + 9) * q[0]).toFixed(1)}" y="${(c - (k + 9) * q[1] + 3).toFixed(1)}" fill="${cols[i]}" font-size="9.5" text-anchor="middle">${names[i]}</text>`;
+    }).join('') + `<circle cx="${c}" cy="${c}" r="2" fill="#e6edf3"/>`;
   }
 
   /** Animate the camera back to looking straight down. */
@@ -966,6 +994,7 @@
         D3 ? `, ${pct(D3.explained)}% with depth — right-drag to tilt` : ''}</span>`;
     }
     if (tilted()) $('stageLabel').innerHTML += '<br><span class="tag">tilted view · double-click or ⟲ Flat to look straight down</span>';
+    renderGizmo(depthInfo[Math.min(n - 1, Math.max(0, s))], P && !P.exact);
   }
 
   // ===========================================================================
