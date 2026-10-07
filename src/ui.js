@@ -36,7 +36,7 @@
       objects: [],
       nPoints: 300,
       display: { grid: true, circle: true, basis: true, origin: true, jac: false, det: false, dist: false, autoFit: false, bg: true, lift: true },
-      train: { target: 'none', dataset: 'moons', nData: 400, noise: 0.08, dataSeed: 0, transform: 'rotation', morph: MORPHS[dim][0].join('>'), amount: 0.9, optimizer: 'adam', lr: 0.01, batch: 32, stepsPerFrame: 5,
+      train: { target: 'none', goals: [], dataset: 'moons', nData: 400, noise: 0.08, dataSeed: 0, transform: 'rotation', morph: MORPHS[dim][0].join('>'), amount: 0.9, optimizer: 'adam', lr: 0.01, batch: 32, stepsPerFrame: 5,
         redrawEvery: 10, mode: 'joint', stepsPerTask: 300, nTasks: 3, method: 'none', lambda: 100 },
       pins: [],
       custom: [],          // painted points for the "paint your own" dataset: [{ x, label }]
@@ -118,7 +118,11 @@
   const isAnchors = () => S.train.target === 'anchors';
   const isTransform = () => S.train.target === 'transform';
   const isMorph = () => S.train.target === 'morph';
-  const usesClasses = () => isClassify() || isAnchors();
+  const isGoals = () => S.train.target === 'goals';
+  const usesClasses = () => isClassify() || isAnchors() || isGoals();
+  /** "My goals": a goal sends some points somewhere; several goals train together (see buildData). */
+  const goalSplit = () => isGoals() && S.train.goals.some((g) => g.kind === 'classSplit');
+  const classTarget = (c) => { const g = isGoals() && S.train.goals.find((x) => x.kind === 'classPoint' && x.cls === c); return g ? g.target : null; };
   const HOMEO_FLOOR = 0.2;                  // smallest singular value kept in homeomorphism mode
   const morphPair = () => S.train.morph.split('>');
 
@@ -133,12 +137,13 @@
   function accuracy() {
     if (!usesClasses() || !data.length) return null;
     let ok = 0;
-    for (const s of data) {
+    for (const s of (isGoals() ? goalClassData : data)) {
       const o = net.predict(s.x);
-      const pred = isClassify() ? (o[1] > o[0] ? 1 : 0) : (o[0] >= 0 ? 0 : 1);
-      if (pred === s.label) ok++;
+      const v = bgValue(o);
+      if (v === null) return null;
+      if ((v > 0 ? 0 : 1) === s.label) ok++;
     }
-    return ok / data.length;
+    return ok / Math.max(1, (isGoals() ? goalClassData : data).length);
   }
 
   /** Largest distance between an output and its target over a set of samples (vector targets only). */
@@ -172,11 +177,78 @@
     return worstCache.value;
   }
 
+  /**
+   * Signed "which class wins here" for an output o: > 0 blue, < 0 red, null if the task has no such rule.
+   * Logits (classify, or a "split" goal): o₁ − o₂.  Two class points A (blue) and B (red): which one is
+   * nearer, scaled so ±1 means "at that point".  Anchors: the first coordinate.
+   */
+  function bgValue(o) {
+    if (isClassify() || goalSplit()) return (o[0] - o[1]) / 4;
+    if (isAnchors()) return o[0];
+    const A = classTarget(0), B = classTarget(1);
+    if (isGoals() && A && B) {
+      let num = 0, den = 0;
+      for (let k = 0; k < A.length; k++) { const d = A[k] - B[k]; num += (o[k] - (A[k] + B[k]) / 2) * d; den += d * d; }
+      return den ? (2 * num) / den : 0;
+    }
+    return null;
+  }
+
+  let goalClassData = [];         // the class points shown in "my goals" mode (each point once)
+  let goalNextId = 1;
+  const GOAL_KINDS = {
+    classPoint: { name: 'Class → point', formula: (g) => `L = mean ‖f(x) − A‖² over the ${g.cls === 0 ? 'blue' : 'red'} points` },
+    classSplit: { name: 'Separate the classes', formula: () => 'L = mean cross-entropy(softmax f(x), class): blue wins logit₁, red logit₂' },
+    objectPoint: { name: 'Object → point', formula: () => 'L = mean ‖f(x) − A‖² over the object' },
+    objectStay: { name: 'Object stays', formula: () => 'L = mean ‖f(x) − x‖² over the object: keep it where it is' },
+  };
+
+  function defaultGoals() {
+    const z = S.dim === 3 ? [0] : [];
+    return [{ id: goalNextId++, kind: 'classPoint', cls: 0, target: [1, 0, ...z], weight: 1 },
+      { id: goalNextId++, kind: 'classPoint', cls: 1, target: [-1, 0, ...z], weight: 1 }];
+  }
+
+  /** Every goal becomes samples { x, y, type, w, goal }; w = weight · N / (K · nᵢ), so the batch loss is (1/K) Σ wᵢ Lᵢ. */
+  function goalSamples(raw) {
+    const groups = [];
+    for (const g of S.train.goals) {
+      let smp = [];
+      const obj = g.obj !== undefined && S.objects.find((o) => o.id === g.obj);
+      if (g.kind === 'classPoint') smp = raw.filter((r) => r.y === g.cls).map((r) => ({ x: r.x, label: r.y, y: Float64Array.from(g.target), type: 'mse' }));
+      else if (g.kind === 'classSplit') smp = raw.map((r) => ({ x: r.x, label: r.y, y: r.y, type: 'ce' }));
+      else if (obj && g.kind === 'objectPoint') smp = obj.points.map((p) => ({ x: Float64Array.from(p), y: Float64Array.from(g.target), type: 'mse' }));
+      else if (obj && g.kind === 'objectStay') smp = obj.points.map((p) => ({ x: Float64Array.from(p), y: Float64Array.from(p), type: 'mse' }));
+      smp.forEach((q) => { q.goal = g.id; });
+      groups.push({ g, smp });
+    }
+    const live = groups.filter((x) => x.smp.length), N = live.reduce((a, x) => a + x.smp.length, 0);
+    for (const { g, smp } of live) for (const q of smp) q.w = (g.weight * N) / (live.length * smp.length);
+    return live.flatMap((x) => x.smp);
+  }
+
+  /** A goal's weight or target changed: update its samples in place, so training keeps its momentum. */
+  function refreshGoalSamples(g) {
+    const N = data.length, K = new Set(data.map((q) => q.goal)).size, mine = data.filter((q) => q.goal === g.id);
+    for (const q of mine) {
+      q.w = (g.weight * N) / (K * mine.length);
+      if (g.kind === 'classPoint' || g.kind === 'objectPoint') q.y = Float64Array.from(g.target);
+    }
+    analysisDirty = true;
+  }
+
   function buildData() {
     // dataSeed 0 keeps the data tied to the weight seed (as before); the guided start can draw another sample
     const rng = new NN.Rng(S.net.init.seed * 101 + 5 + 7919 * (S.train.dataSeed || 0));
     targetA = null;
-    if (usesClasses()) {
+    if (isGoals()) {
+      const ds = S.train.dataset;
+      const raw = ds === 'custom' ? S.custom.map((p) => ({ x: Float64Array.from(p.x), y: p.label }))
+        : ds.startsWith('shape:') ? NN.makeShape(ds.slice(6)).components.flatMap((c) => c.pts.map((x) => ({ x, y: c.label })))
+        : NN.makeDataset(ds, S.train.nData || 400, S.dim, rng, S.train.noise ?? 0.08);
+      goalClassData = raw.map((r) => ({ x: r.x, label: r.y }));
+      data = goalSamples(raw);
+    } else if (usesClasses()) {
       const ds = S.train.dataset;
       const raw = ds === 'custom' ? S.custom.map((p) => ({ x: Float64Array.from(p.x), y: p.label }))
         : ds.startsWith('shape:') ? NN.makeShape(ds.slice(6)).components.flatMap((c) => c.pts.map((x) => ({ x, y: c.label })))
@@ -309,8 +381,9 @@
     if (usesClasses() && S.train.dataset.startsWith('shape:')) {     // exact shapes: dense curves show every tear
       NN.makeShape(S.train.dataset.slice(6), 4000).components.forEach((c, k) => ds.push({ id: `shape${k}`, role: 'data',
         kind: c.closed ? 'line' : 'points', closed: c.closed, color: CLASS_COLORS[c.label], width: 2, size: 1.4, pts: c.pts }));
-    } else if (usesClasses() && data.length) {
-      ds.push({ id: 'data', role: 'data', kind: 'points', size: 2.4, colors: data.map((s) => CLASS_COLORS[s.label]), pts: data.map((s) => s.x) });
+    } else if (usesClasses() && (data.length || goalClassData.length)) {
+      const shown = isGoals() ? goalClassData : data;
+      if (shown.length) ds.push({ id: 'data', role: 'data', kind: 'points', size: 2.4, colors: shown.map((s) => CLASS_COLORS[s.label]), pts: shown.map((s) => s.x) });
     }
     if (isMorph()) {
       NN.makeShape(morphPair()[0], 3000).components.forEach((c, k) => ds.push({ id: `msrc${k}`, role: 'object', kind: c.filled || !c.closed ? 'points' : 'line',
@@ -514,12 +587,14 @@
       }
     }
     // class background: how the rest of the network would classify a point sitting here, at every stage
-    const showBg = vd === 2 && usesClasses() && D.bg && !tilted();
+    const showBg = vd === 2 && usesClasses() && D.bg && !tilted() && bgValue(new Float64Array(vd)) !== null;
     if (showBg) items.push(backgroundImage(Math.round(tt)));
     // say what the colours are: a reading rule applied to the network's output, not part of the network
     const legend = $('legend');
     legend.classList.toggle('hidden', !showBg);
-    if (showBg) legend.textContent = isAnchors()
+    if (showBg) legend.textContent = isGoals() && !goalSplit()
+      ? 'Background colour: which class point the rest of the network sends each spot nearer to — brighter blue toward the blue point A, brighter red toward the red point B, dark = halfway.'
+      : isAnchors()
       ? 'Background colour = f(x)·(1, 0): how far the network moves each input toward the blue point (1, 0) (brighter blue) or the red point (−1, 0) (brighter red). Dark = halfway, i.e. the network is undecided there. Full colour at ±1.'
       : 'Background colour = logit₁ − logit₂: brighter blue where the first logit wins by more, brighter red where the second does; dark = undecided. Full colour at ±4.';
     const bgStage = Math.round(tt), bgBasis = showBg && traces.bases[bgStage];
@@ -561,7 +636,21 @@
         pts: Float64Array.from(c.pts.flatMap((p) => Array.from(p))), closed: c.closed, color: '#e6edf3', alpha: 0.4, dash: [5, 5], width: 1.5, size: 1.2, noFit: true }));
     }
     // the decision boundary (equal logits) lives on the diagonal of the output plane
-    if (atOutput && isClassify() && vd === 2) {
+    // my goals: target points (drag them at the output), and the shape an "object stays" goal keeps
+    if (atOutput && isGoals()) {
+      for (const g of S.train.goals) {
+        const obj = g.obj !== undefined && S.objects.find((o) => o.id === g.obj);
+        if ((g.kind === 'classPoint' || g.kind === 'objectPoint') && g.target) {
+          const col = g.kind === 'classPoint' ? CLASS_COLORS[g.cls] : (obj ? obj.color : '#e6edf3');
+          items.push({ id: `goal${g.id}`, kind: 'marker', p: g.target.slice(0, vd), color: col, size: 9, ring: true });
+          if (vd === 2) items.push({ kind: 'label', p: g.target, text: `${g.kind === 'classPoint' ? (g.cls === 0 ? 'blue' : 'red') : (obj ? obj.type : 'object')} → A${dragGoal && dragGoal.id === g.id ? '' : ' (drag)'}`, color: col });
+        } else if (g.kind === 'objectStay' && obj) {
+          items.push({ id: `goalStay${g.id}`, kind: 'line', pts: Float64Array.from(obj.points.flatMap((p) => p.slice(0, vd))), closed: obj.closed,
+            color: obj.color, alpha: 0.45, dash: [5, 5], width: 1.5, noFit: true });
+        }
+      }
+    }
+    if (atOutput && (isClassify() || goalSplit()) && vd === 2) {
       const M = 1e3;
       items.push({ kind: 'line', pts: Float64Array.from([-M, -M, M, M]), color: '#e6edf3', alpha: 0.5, dash: [6, 6], width: 1.2, noFit: true });
       items.push({ kind: 'label', p: [0.6, 0.6], text: 'decision boundary (logit₁ = logit₂)', color: '#8b949e' });
@@ -668,7 +757,7 @@
       for (let i = 0; i < W; i++) {
         const x = box[0] + ((i + 0.5) * (box[2] - box[0])) / W, y = box[3] - ((j + 0.5) * (box[3] - box[1])) / H;
         const o = stage === 0 ? net.predict([x, y]) : restOfNetwork(stage, [x, y]);
-        const raw = isClassify() ? (o[0] - o[1]) / 4 : o[0];
+        const raw = bgValue(o);
         const v = Math.max(-1, Math.min(1, Number.isFinite(raw) ? raw : 0));
         const col = v >= 0 ? blue : red, k = 4 * (j * W + i);
         for (let c = 0; c < 3; c++) rgba[k + c] = col[c];
@@ -682,7 +771,7 @@
       let ok = 0;
       for (let i = 0; i < dd.st.length; i++) {
         const o = restOfNetwork(stage, [dd.proj[stage][2 * i], dd.proj[stage][2 * i + 1]]), y = net.predict(dd.pts[i]);
-        const side = (v) => (isClassify() ? v[0] - v[1] : v[0]) > 0;
+        const side = (v) => bgValue(v) > 0;
         if (side(o) === side(y)) ok++;
       }
       agree = ok / dd.st.length;
@@ -977,6 +1066,7 @@
       const r = cv.getBoundingClientRect(), px = e.clientX - r.left, py = e.clientY - r.top, w = viz2.toWorld(px, py);
       try { cv.setPointerCapture(e.pointerId); } catch (err) { /* synthetic events have no capturable pointer */ }
       if (e.button === 2 && S.display.lift) { orbit = { x: e.clientX, y: e.clientY }; return; }
+      if (e.button === 0) { const g = goalAt(px, py); if (g) { dragGoal = g; return; } }
       if (e.button !== 0 || tool === 'pan') { pan = { x: e.clientX, y: e.clientY }; return; }
       if (tilted()) { cam.yaw = 0; cam.pitch = 0; }          // drawing happens on the flat input plane
       if (tool === 'curve' || tool === 'region') { t = 0; anim = null; drawing = { type: tool, pts: [w] }; }
@@ -989,6 +1079,13 @@
       const r = cv.getBoundingClientRect(), w = viz2.toWorld(e.clientX - r.left, e.clientY - r.top);
       if (drawing && drawing.type === 'paint') {
         if (Math.hypot(w[0] - drawing.last[0], w[1] - drawing.last[1]) * viz2.scale > 6) { spray(w, drawing.label); drawing.last = w; }
+        return;
+      }
+      if (dragGoal) {
+        dragGoal.target[0] = +w[0].toFixed(2); dragGoal.target[1] = +w[1].toFixed(2);
+        refreshGoalSamples(dragGoal);
+        const card = document.querySelector(`.gcard[data-goal="${dragGoal.id}"]`);
+        if (card) [0, 1].forEach((k) => { const el = card.querySelector(`[data-k="t${k}"]`); if (el) { el.value = dragGoal.target[k]; el.parentElement.querySelector('.val').textContent = dragGoal.target[k].toFixed(2); } });
         return;
       }
       if (orbit) {
@@ -1006,7 +1103,7 @@
         if (Math.hypot(w[0] - last[0], w[1] - last[1]) * viz2.scale > 2) drawing.pts.push(w);
       }
     });
-    const up = () => { pan = null; orbit = null; finishDrawing(); };
+    const up = () => { pan = null; orbit = null; dragGoal = null; finishDrawing(); };
     cv.addEventListener('pointerup', up);
     cv.addEventListener('pointercancel', () => { pan = null; orbit = null; drawing = null; });
     cv.addEventListener('dblclick', () => { if (tilted()) flatView(); });
@@ -1097,7 +1194,7 @@
     const parts = [`step ${T.step_}`];
     if (T.lossHistory.length) parts.push(`loss ${fmt(T.lossHistory[T.lossHistory.length - 1])}`);
     const acc = accuracy();
-    if (acc !== null && T.step_ > 0) parts.push(`accuracy ${(100 * acc).toFixed(1)}% (${isAnchors() ? 'nearest target point' : 'larger logit'})`);
+    if (acc !== null && T.step_ > 0) parts.push(`accuracy ${(100 * acc).toFixed(1)}% (${isAnchors() ? 'nearest target point' : isGoals() && !goalSplit() ? 'nearer class point' : 'larger logit'})`);
     if (T.step_ > 0 && (isAnchors() || isMorph())) {
       const wt = worstOn(data), wd = denseData() ? worstDense() : null;
       if (wd !== null && wd !== undefined) {
@@ -1121,6 +1218,7 @@
       case 'transform': return 'Every input x should go to A·x, where A is the chosen linear map (drawn dashed at the output).';
       case 'morph': { const [a, b] = morphPair(); return `Point i of the ${NN.SHAPES[a].label} should land on point i of the ${NN.SHAPES[b].label} (drawn dashed at the output). Watch “worst point off by”: a topological obstruction leaves some points far from their target.`; }
       case 'pins': return 'With the Pin tool, drag from an input point to where its output should go; the network bends space to satisfy every pin.';
+      case 'goals': return 'Your own goals, trained together. Each goal says which points should go where; its weight says how much it counts. Drag a target point A at the output to move it.';
       default: return 'No training: the network keeps its random weights. Move the stage slider to see what they do to space.';
     }
   }
@@ -1171,6 +1269,8 @@
     if (!pairs.some((p) => p.join('>') === S.train.morph)) S.train.morph = pairs[0].join('>');
     mp.innerHTML = pairs.map((p) => `<option value="${p.join('>')}">${NN.SHAPES[p[0]].label} → ${NN.SHAPES[p[1]].label}</option>`).join('');
     mp.value = S.train.morph;
+    $('goalsBox').classList.toggle('hidden', !isGoals());
+    if (isGoals()) renderGoals();
     $('morphRow').classList.toggle('hidden', !isMorph());
     $('transformRow').classList.toggle('hidden', !isTransform());
     $('amountRow').classList.toggle('hidden', !isTransform());
@@ -1178,6 +1278,7 @@
   }
 
   function onTargetChange() {
+    if (isGoals() && !S.train.goals.length) S.train.goals = defaultGoals();
     syncTargetUI();
     rebuildTrainer();
     invalidate();
@@ -1364,6 +1465,7 @@
     };
     $('addShape').onclick = addShape;
     bindObjects();
+    bindGoals();
     $('expRun').onclick = () => runExperiment(0);
     $('expPlus').onclick = () => runExperiment(1);
     $('transform').onchange = (e) => { S.train.transform = e.target.value; training = false; rebuildTrainer(); invalidate(); };
@@ -1715,6 +1817,93 @@
     }
   }
 
+  // ---- my goals: cards in the Goal column -------------------------------------------------------------------
+  function renderGoals() {
+    const box = $('goalsList'), axes = S.dim === 2 ? ['x', 'y'] : ['x', 'y', 'z'];
+    const objOpts = (sel) => S.objects.map((o) => `<option value="${o.id}"${o.id === sel ? ' selected' : ''}>${escHtml(o.type)}</option>`).join('');
+    const slider = (gid, key, label, min, max, step, v) => `<div class="row"><label>${label}</label>
+      <input data-g="${gid}" data-k="${key}" type="range" min="${min}" max="${max}" step="${step}" value="${v}"><span class="val">${(+v).toFixed(2)}</span></div>`;
+    box.innerHTML = S.train.goals.map((g) => {
+      const K = GOAL_KINDS[g.kind];
+      let body = '';
+      if (g.kind === 'classPoint') {
+        body += `<div class="row"><label>Class</label><select data-g="${g.id}" data-k="cls"><option value="0"${g.cls === 0 ? ' selected' : ''}>blue</option><option value="1"${g.cls === 1 ? ' selected' : ''}>red</option></select></div>`;
+      }
+      if (g.kind === 'objectPoint' || g.kind === 'objectStay') {
+        body += S.objects.length ? `<div class="row"><label>Object</label><select data-g="${g.id}" data-k="obj">${objOpts(g.obj)}</select></div>`
+          : '<div class="note">Add an object first (＋ Objects).</div>';
+      }
+      if (g.target) body += axes.map((a, k) => slider(g.id, `t${k}`, `A ${a}`, -2.5, 2.5, 0.05, g.target[k])).join('');
+      body += slider(g.id, 'weight', 'Weight', 0, 3, 0.05, g.weight);
+      return `<div class="gcard" data-goal="${g.id}"><div class="ghead"><b>${K.name}</b><span class="gloss tag" data-loss="${g.id}"></span>
+        <button class="x" data-g="${g.id}" data-k="remove" data-tip="Remove this goal">✕</button></div>${body}<div class="gformula">${K.formula(g)}</div></div>`;
+    }).join('') || '<div class="note">No goals yet: add one below.</div>';
+    $('goalsTotal').textContent = S.train.goals.length > 1 ? `Total: L = (1/${S.train.goals.length}) Σ wᵢ Lᵢ` : '';
+    updateGoalLosses(true);
+  }
+
+  let goalLossAt = 0;
+  /** Each goal's own (unweighted) loss, next to its name. */
+  function updateGoalLosses(force) {
+    if (!isGoals() || (!force && performance.now() - goalLossAt < 400) || !isOpen('goalsbox')) return;
+    goalLossAt = performance.now();
+    for (const g of S.train.goals) {
+      const el = document.querySelector(`[data-loss="${g.id}"]`), mine = data.filter((q) => q.goal === g.id);
+      if (!el) continue;
+      if (!mine.length) { el.textContent = ''; continue; }
+      let L = 0;
+      for (const q of mine) L += NN.sampleLoss(net, { ...q, w: 1 }, q.type);
+      el.textContent = `L = ${fmt(L / mine.length)}`;
+    }
+  }
+
+  function addGoal(kind) {
+    const z = S.dim === 3 ? [0] : [], g = { id: goalNextId++, kind, weight: 1 };
+    if (kind === 'classPoint') { const used = S.train.goals.filter((x) => x.kind === 'classPoint').map((x) => x.cls); g.cls = used.includes(0) ? 1 : 0; g.target = [g.cls ? -1 : 1, 0, ...z]; }
+    if (kind === 'objectPoint') { g.target = [0, 1, ...z]; }
+    if (kind === 'objectPoint' || kind === 'objectStay') g.obj = S.objects.length ? S.objects[S.objects.length - 1].id : undefined;
+    S.train.goals.push(g);
+    renderGoals(); rebuildTrainer(); invalidate();
+  }
+
+  function bindGoals() {
+    $('goalAdd').addEventListener('click', (e) => { const b = e.target.closest('[data-kind]'); if (b) addGoal(b.dataset.kind); });
+    const box = $('goalsList');
+    box.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-k="remove"]');
+      if (!b) return;
+      S.train.goals = S.train.goals.filter((g) => g.id !== +b.dataset.g);
+      renderGoals(); rebuildTrainer(); invalidate();
+    });
+    box.addEventListener('input', (e) => {
+      const el = e.target, g = S.train.goals.find((x) => x.id === +el.dataset.g), k = el.dataset.k;
+      if (!g || !k || el.tagName === 'SELECT') return;
+      if (k === 'weight') g.weight = +el.value;
+      else if (k[0] === 't') g.target[+k.slice(1)] = +el.value;
+      el.parentElement.querySelector('.val').textContent = (+el.value).toFixed(2);
+      refreshGoalSamples(g);
+    });
+    box.addEventListener('change', (e) => {
+      const el = e.target, g = S.train.goals.find((x) => x.id === +el.dataset.g), k = el.dataset.k;
+      if (!g || el.tagName !== 'SELECT') return;
+      if (k === 'cls') g.cls = +el.value;
+      if (k === 'obj') g.obj = +el.value;
+      renderGoals(); rebuildTrainer(); invalidate();
+    });
+  }
+
+  /** Drag a goal's target point A at the output stage (2D, flat view). */
+  let dragGoal = null;
+  function goalAt(px, py) {
+    if (!isGoals() || S.dim !== 2 || tilted() || !traces || t < traces.nStages - 1 - 1e-6) return null;
+    for (const g of S.train.goals) {
+      if (!g.target) continue;
+      const q = viz2.toScreen(g.target[0], g.target[1]);
+      if (q && Math.hypot(q[0] - px, q[1] - py) < 14) return g;
+    }
+    return null;
+  }
+
   // ---- objects: chips, a card for the selected one, ready-made shapes, transformation log ----------------
   const escHtml = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   let selObj = null;            // id of the object whose card is open
@@ -1930,6 +2119,7 @@
     S.net.width = S.net.width === 5 - d ? d : S.net.width;   // follow the "width = dimension" default
     S.objects = []; S.pins = [];
     if (S.train.target === 'pins') S.train.target = 'none';
+    S.train.goals = isGoals() ? defaultGoals() : [];          // targets have the old dimension
     tool = 'pan'; t = 0; anim = null; playing = false; training = false;
     $('c2d').classList.toggle('hidden', d !== 2);
     $('c3d').classList.toggle('hidden', d !== 3);
@@ -1980,6 +2170,7 @@
     const prevDim = S.dim;
     S = merged;
     objId = 1 + Math.max(0, ...S.objects.map((o) => o.id || 0));
+    goalNextId = 1 + Math.max(0, ...(S.train.goals || []).map((g) => g.id || 0));
     if (S.dim !== prevDim) {
       $('c2d').classList.toggle('hidden', S.dim !== 2);
       $('c3d').classList.toggle('hidden', S.dim !== 3);
@@ -2024,6 +2215,7 @@
     if (now - lastInspector > (training ? 120 : 60)) { lastInspector = now; try { renderInspectorAndNet(); } catch (err) { console.error(err); } }
     renderSummaries();
     updateObjLog(now);
+    updateGoalLosses(false);
     if (analysisDirty && now - lastAnalysis > (training ? 700 : 150)) {
       analysisDirty = false; lastAnalysis = now;
       try { updateAnalysis(); } catch (err) { console.error(err); }
@@ -2207,7 +2399,7 @@
     }
   }
 
-  const TASK_NAMES = { none: 'no training', anchors: 'classes → points', classify: 'classify', transform: 'linear map', morph: 'shape → shape', pins: 'pins' };
+  const TASK_NAMES = { goals: 'my goals', none: 'no training', anchors: 'classes → points', classify: 'classify', transform: 'linear map', morph: 'shape → shape', pins: 'pins' };
   function setText(id, text) { const el = $(id); if (el && el.textContent !== text) el.textContent = text; }
   function renderSummaries() {
     if (!net) return;

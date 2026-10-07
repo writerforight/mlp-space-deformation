@@ -24,6 +24,26 @@ for (const act of NN.ACTIVATION_NAMES) {
   }
 }
 
+// 1b) mixed batch: per-sample loss type and weight (several goals trained together)
+{
+  const net = new NN.MLP([2, 5, 2], ['tanh', 'identity']).init('normal', 0.8, new NN.Rng(9));
+  const batch = [{ x: [0.3, -0.7], y: 1, type: 'ce', w: 2 }, { x: [-1.1, 0.4], y: [-0.3, 0.9], w: 0.5 }, { x: [0.5, 0.5], y: [0.1, 0.1] }];
+  const { grad, loss } = NN.batchLossGrad(net, batch, 'mse');
+  let worst = 0;
+  for (let k = 0; k < net.nParams; k++) {
+    const h = 1e-6, t0 = net.theta[k];
+    net.theta[k] = t0 + h; const lp = NN.batchLossGrad(net, batch, 'mse').loss;
+    net.theta[k] = t0 - h; const lm = NN.batchLossGrad(net, batch, 'mse').loss;
+    net.theta[k] = t0;
+    const fd = (lp - lm) / (2 * h);
+    if (Math.abs(fd) + Math.abs(grad[k]) > 1e-7) worst = Math.max(worst, relErr(fd, grad[k]));
+  }
+  check('backprop mixed ce/mse with weights', worst < 1e-5, `max rel err ${worst.toExponential(1)}`);
+  const byHand = (2 * NN.sampleLoss(net, { ...batch[0], w: 1 }, 'ce') + 0.5 * NN.sampleLoss(net, { ...batch[1], w: 1 }, 'mse')
+    + NN.sampleLoss(net, batch[2], 'mse')) / 3;
+  check('mixed batch loss = mean of weighted sample losses', Math.abs(byHand - loss) < 1e-12);
+}
+
 // 2) input Jacobians of every stage vs. finite differences (3D, wide layer)
 {
   const rng = new NN.Rng(5);

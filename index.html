@@ -46,6 +46,15 @@
   #modelStrip { display: flex; align-items: center; gap: 14px; padding: 8px 12px; border-top: 1px solid var(--line); background: var(--panel); }
   .ms-layers { flex: 1; display: flex; align-items: center; gap: 8px; min-width: 0; }
   .ms-layers input[type=range] { flex: 1; min-width: 80px; }
+  /* goals */
+  .gcard { border: 1px solid var(--line); border-radius: 8px; padding: 4px 10px 8px; margin: 6px 0; background: var(--panel2); }
+  .ghead { display: flex; align-items: center; gap: 8px; margin: 2px 0 2px; }
+  .ghead .gloss { margin-left: auto; font-variant-numeric: tabular-nums; }
+  .ghead .x { background: none; border: none; color: var(--muted); padding: 0 4px; }
+  .ghead .x:hover { color: var(--bad); }
+  .gcard .row > label:first-child { width: 64px; }
+  .gformula { font: 11px ui-monospace, monospace; color: var(--muted); margin-top: 4px; }
+  #goalAdd button { padding: 3px 9px; }
   /* objects */
   #presetBtns button { padding: 3px 9px; }
   .ochips { display: flex; flex-wrap: wrap; gap: 5px; margin: 4px 0 6px; }
@@ -393,7 +402,8 @@
       <li><b>Look:</b> the strip at the bottom is the network: Input ▸ W₁ | tanh ▸ … ▸ Output. Press ▶, click a step, or drag along the strip — objects and the grid go through every layer (linear step, then activation).</li>
       <li><b>Draw:</b> <b>＋ Objects</b> (bottom left) — pick a tool, draw on the view, or add a ready-made shape.</li>
       <li><b>Inspect:</b> ⓘ next to a layer in the strip — weights, activation and history. Double-click a weight to change it. <b>◫</b> shows the neuron diagram.</li>
-      <li><b>Train:</b> <b>Model ▲</b> opens network, goal and training settings; pick a task, press <b>★ Recommended</b>, then <b>▶ Train</b>.</li>
+      <li><b>Train:</b> <b>Model ▲</b> opens network, goal and training settings; pick a task, press <b>★ Recommended</b>, then <b>▶ Train</b>.
+        With <i>my own goals</i> you mix goals (class → point, separate classes, object → point, object stays) and drag their targets at the output.</li>
       <li><b>More:</b> <b>View ▾</b> for overlays, <b>Analysis</b> for loss and diagnostics, <b>Experiments</b> for what a network cannot do.</li>
     </ol>
     <div class="help-title">Keyboard</div>
@@ -620,12 +630,24 @@
         <div class="row"><label data-tip="What the network is trained to do.">Task</label>
           <select id="target">
             <option value="none">none (just look)</option>
+            <option value="goals">my own goals (mix them)</option>
             <option value="anchors">send each class to a point</option>
             <option value="classify">separate classes (logits)</option>
             <option value="transform">match a linear map</option>
             <option value="morph">turn one shape into another</option>
             <option value="pins">pinned points</option>
           </select></div>
+        <div id="goalsBox" class="hidden" data-sec="goalsbox">
+          <div id="goalsList"></div>
+          <div class="group-label">Add a goal</div>
+          <div id="goalAdd" class="btns">
+            <button data-kind="classPoint" data-tip="Send every point of one class to a point A you choose (drag A at the output).">Class → point</button>
+            <button data-kind="classSplit" data-tip="Classic classification: two logits, cross-entropy.">Separate classes</button>
+            <button data-kind="objectPoint" data-tip="Send one of your objects to a point A.">Object → point</button>
+            <button data-kind="objectStay" data-tip="Keep one of your objects where it is (f(x) = x on it).">Object stays</button>
+          </div>
+          <div class="note" id="goalsTotal"></div>
+        </div>
         <div class="row" id="datasetRow"><label data-tip="Two-class dataset: blue is class 1, red is class 2.">Data</label>
           <select id="dataset">
             <optgroup label="Easy"><option value="blobs">two blobs (already separable)</option><option value="moons">two moons</option><option value="circles">disk inside a ring</option></optgroup>

@@ -279,9 +279,14 @@
   }
 
   /** Loss of one sample.  sample = { x, y } where y is a target vector (mse) or class index (ce). */
+  /*
+   * A sample may carry its own loss type and weight: { x, y, type?: 'mse' | 'ce', w?: number }.  That lets
+   * several goals with different losses train together (total loss = Σ w · L).  Without them the batch
+   * type and weight 1 apply, as before.
+   */
   function sampleLoss(net, sample, type) {
-    const out = net.predict(sample.x);
-    return (type === 'ce' ? crossEntropy(out, sample.y) : mse(out, sample.y)).loss;
+    const out = net.predict(sample.x), ty = sample.type || type, w = sample.w ?? 1;
+    return w * (ty === 'ce' ? crossEntropy(out, sample.y) : mse(out, sample.y)).loss;
   }
 
   /** Mean loss and mean gradient ∂L/∂θ over a batch. */
@@ -291,8 +296,10 @@
     for (const s of batch) {
       const cache = net.forward(s.x);
       const out = cache.as[cache.as.length - 1];
-      const r = type === 'ce' ? crossEntropy(out, s.y) : mse(out, s.y);
-      loss += r.loss;
+      const ty = s.type || type, w = s.w ?? 1;
+      const r = ty === 'ce' ? crossEntropy(out, s.y) : mse(out, s.y);
+      loss += w * r.loss;
+      if (w !== 1) for (let i = 0; i < r.grad.length; i++) r.grad[i] *= w;
       net.backward(cache, r.grad, grad);
     }
     const n = Math.max(1, batch.length);

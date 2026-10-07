@@ -25,6 +25,24 @@ starting weights. Every card plays a small preview computed by a tiny network tr
 goes straight to the full workspace, and **Guided start** in the header opens the guide again.
 Code: `src/wizard.js` (flow) and `src/minis.js` (previews).
 
+## The workspace
+
+One big view; everything else opens on demand, and one panel at a time (✕, Esc or a click outside closes it).
+
+- **The strip at the bottom is the network**: `Input ▸ [W₁ | tanh] ▸ … ▸ Output`. Click a step to go there,
+  drag along the strip to scrub, ⓘ inspects a layer, − / ＋ change the depth. ▶ Train and a loss sparkline
+  sit on the right; **Model ▲** opens network | goal | training settings.
+- **＋ Objects** (bottom left): ready-made shapes, drawing by hand, and a card per object (colour, size,
+  position, number of points). **ⓘ How it changes** logs what every layer does to the object: length,
+  stretch, signed area (mirrored when negative) and self-crossings.
+- **View ▾** (top right): overlays, the class background (at every stage: how the rest of the network
+  classifies each spot), and for 2D a third principal direction of wide layers as depth — right-drag to
+  tilt the view and see how a wide layer lifts points over each other.
+- **My own goals**: a goal sends some points somewhere — a class to a point you drag, the classes apart
+  (cross-entropy), an object to a point, or an object kept in place. Goals train together with weights;
+  each card shows its loss formula and current value. The engine supports a loss type and weight per
+  sample for this (`src/nn.js`, checked against finite differences).
+
 ## Things to try
 
 1. **Watch a network bend space.** Press ▶ under the view: the grid, the unit circle and the example
