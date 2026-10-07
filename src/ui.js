@@ -2399,6 +2399,52 @@
     return out;
   }
 
+  /*
+   * "One point through this layer": a_in → [W | b] → z = W·a_in + b → σ → a_out, for the origin or a basis
+   * vector (chosen above).  In layer 1 the input is e.g. e₁ = (1, 0) itself; in later layers it is where
+   * that point has arrived.  Hovering an entry of z shows its whole sum.
+   */
+  let exSel = 1;
+  function renderInspExample(l) {
+    const box = $('inspExample'), d = S.dim, Lay = net.layout[l - 1], act = net.acts[l - 1], th = net.theta;
+    const names = ['o', ...[...Array(d)].map((_, i) => `e${subN(i + 1)}`)], colors = ['#e6edf3', ...BASIS_COLORS];
+    exSel = Math.min(exSel, d);
+    const p = new Float64Array(d); if (exSel > 0) p[exSel - 1] = 1;
+    const st = net.stages(p), aIn = st[2 * l - 2], z = st[2 * l - 1], aOut = st[2 * l];
+    let mx = 1e-9;
+    for (const v of th) mx = Math.max(mx, Math.abs(v));
+    const n2 = (v) => (Math.abs(v) < 0.005 ? '0.00' : v.toFixed(2)).replace('-', '−');
+    const cell = (v, scale = mx) => {
+      const a = (0.1 + 0.6 * Math.min(1, Math.abs(v) / scale)).toFixed(3);
+      return `<span style="background:${v >= 0 ? `rgba(227,179,65,${a})` : `rgba(188,140,255,${a})`}">${n2(v)}</span>`;
+    };
+    const vec = (v, label, cls = '', titles = null) => `<div class="ex-col"><span class="lbl">${label}</span><div class="ex-vec ${cls}">${
+      Array.from(v).map((x, i) => (titles ? cell(x, Math.max(1, ...Array.from(v).map(Math.abs))).replace('<span', `<span title="${titles[i]}"`) : cell(x, Math.max(1, ...Array.from(v).map(Math.abs))))).join('')}</div></div>`;
+    let W = '';
+    for (let i = 0; i < Lay.nout; i++) for (let j = 0; j < Lay.nin; j++) W += cell(th[Lay.w + i * Lay.nin + j]);
+    const bv = Array.from(th.subarray(Lay.b, Lay.b + Lay.nout));
+    const sums = [...Array(Lay.nout)].map((_, i) => {
+      const terms = [...Array(Lay.nin)].map((__, j) => `(${n2(th[Lay.w + i * Lay.nin + j])})(${n2(aIn[j])})`).join(' + ');
+      return `z${subN(i + 1)} = ${terms} + (${n2(bv[i])}) = ${n2(z[i])}`;
+    });
+    const inName = l === 1 ? `x = ${names[exSel]}` : `a${subN(l - 1)}`, actName = act === 'identity' ? 'linear' : act;
+    const pIn = `(${Array.from(p).map((v) => v.toFixed(0)).join(', ')})`;
+    box.innerHTML = `<div class="ex-pick">Follow ${names.map((nm, i) => `<button data-ex="${i}" class="${i === exSel ? 'on' : ''}" style="color:${colors[i]}">${nm}</button>`).join('')}</div>
+      <div class="ex-note">${names[exSel]} = ${pIn} enters the network${l === 1 ? ' here.' : `; layer ${l} receives it as a${subN(l - 1)}, after ${l - 1} layer${l > 2 ? 's' : ''}.`}
+        Hover a value of z to see its sum.</div>
+      <div class="ex-flow">
+        ${vec(aIn, `in: ${inName}`)}
+        <div class="ex-op">→<small>W·a + b</small></div>
+        <div class="ex-col"><span class="lbl">W${subN(l)} (${Lay.nout}×${Lay.nin})</span><div class="ex-mat" style="grid-template-columns: repeat(${Lay.nin}, auto)">${W}</div></div>
+        <div class="ex-col"><span class="lbl">b${subN(l)}</span><div class="ex-vec">${bv.map((v) => cell(v)).join('')}</div></div>
+        <div class="ex-op">=</div>
+        ${vec(z, 'z (linear)', '', sums)}
+        <div class="ex-op">→<small>${actName}</small></div>
+        ${vec(aOut, `out: a${subN(l)}${l === net.nLayers ? ' = f(x)' : ''}`, 'out')}
+      </div>`;
+    box.querySelectorAll('[data-ex]').forEach((b) => { b.onclick = () => { exSel = +b.dataset.ex; renderInspExample(l); }; });
+  }
+
   function renderInspectorAndNet() {
     if (!net || !traces) return;
     const L = net.nLayers;
@@ -2418,6 +2464,7 @@
     const W0 = h0 ? W.map((_, i) => Array.from(h0.subarray(Lay.w + i * Lay.nin, Lay.w + (i + 1) * Lay.nin))) : null;
     $('inspTitle').innerHTML = `Layer ${l} of ${L}<span class="tag">${Lay.nin} → ${Lay.nout} · ${act}${l === L ? ' · output' : ''}</span>`;
     $('inspPrev').disabled = l <= 1; $('inspNext').disabled = l >= L;
+    renderInspExample(l);
     inspect.cells = Inspector.drawWeights($('wCanvas'), W, b, { W0, hover: inspect.hover });
     // numbers
     const sv = NN.singularValues(W), rank = NN.rankOf(sv);

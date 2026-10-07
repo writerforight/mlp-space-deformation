@@ -68,6 +68,20 @@
   #modelStrip { display: flex; align-items: center; gap: 14px; padding: 8px 12px; border-top: 1px solid var(--line); background: var(--panel); }
   .ms-layers { flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; min-width: 0; }   /* ▶ sits right next to the network */
   .ms-layers input[type=range] { flex: 1; min-width: 80px; }
+  /* layer inspector: one point through the layer */
+  .ex-pick { display: flex; align-items: center; gap: 5px; margin: 2px 0 6px; font-size: 12px; color: var(--muted); }
+  .ex-pick button { padding: 1px 9px; border-radius: 12px; font-weight: 650; }
+  .ex-pick button.on { background: var(--panel2); border-color: currentColor; }
+  .ex-note { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  .ex-flow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 5px; overflow-x: auto; padding: 6px 2px 8px; font: 10.5px ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .ex-col { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .ex-col .lbl { font: 10.5px ui-sans-serif, system-ui, sans-serif; color: var(--muted); margin-bottom: 2px; white-space: nowrap; }
+  .ex-vec, .ex-mat { display: grid; gap: 2px; padding: 2px 4px; border-left: 1.5px solid var(--muted); border-right: 1.5px solid var(--muted); border-radius: 4px; }
+  .ex-vec span, .ex-mat span { min-width: 32px; padding: 2px 2px; text-align: right; border-radius: 3px; color: var(--text); }
+  .ex-vec.out span { outline: 1px solid rgba(88, 166, 255, 0.35); }
+  .ex-vec span[title] { cursor: help; }
+  .ex-op { color: var(--muted); font-size: 13px; white-space: nowrap; display: flex; flex-direction: column; align-items: center; }
+  .ex-op small { font-size: 10px; }
   /* goals */
   .gcard { border: 1px solid var(--line); border-radius: 8px; padding: 4px 10px 8px; margin: 6px 0; background: var(--panel2); }
   .ghead { display: flex; align-items: center; gap: 8px; margin: 2px 0 2px; }
@@ -554,7 +568,12 @@
         </div>
         <div class="btns"><button id="inspShowLin" data-tip="Move the view to this layer's linear step z = W a + b.">Show linear step</button>
           <button id="inspShowAct" data-tip="Move the view to this layer's activation step a = σ(z).">Show activation</button></div>
+        <div class="group-label">One point through this layer</div>
+        <div id="inspExample"></div>
         <div class="group-label">Weights W and bias b <span class="tag">— double-click a cell to edit</span></div>
+        <div class="note">Row i = neuron zᵢ, column j = input aⱼ: wᵢⱼ is how much input j counts for neuron i.
+          The b column holds one number per neuron, added after W·a: it shifts that neuron, so the layer can move
+          space as well as stretch and turn it.</div>
         <canvas id="wCanvas" class="chart wmat"></canvas>
         <div class="kv" id="wStats"></div>
         <div class="group-label">Activation σ(z) and where the points are</div>

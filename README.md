@@ -80,10 +80,10 @@ One big view; everything else opens on demand, and one panel at a time (✕, Esc
    Model ▲ → Continual learning → Mode *sequential*, train with anti-forgetting *none*, then with
    *replay*, *OGD* or *EWC*, and compare the Forgetting table under *Analysis*.
 
-![Forward view: a tanh network half-way through layer 2, with Jacobian ellipses; the strip at the bottom is the network](docs/screenshot-2d.png)
+![Forward view: a tanh network half-way through layer 2, with Jacobian ellipses; top left, where o, e₁, e₂ are before the layer, after W·a + b and after tanh; the strip at the bottom is the network](docs/screenshot-2d.png)
 ![My own goals on the spirals: blue to A, red to B, at the output; the Model drawer shows network, goals with their losses, and training](docs/screenshot-train.png)
 ![A wide hidden layer, tilted: the third principal direction as depth shows how the layer lifts one class over the other](docs/screenshot-tilt.png)
-![Layer inspector and neuron diagram; the class background of a wide stage is a 2D slice, and the legend says how often it agrees with the network](docs/screenshot-inspector.png)
+![Layer inspector: e₁ = (1, 0) goes through layer 1 — in → W₁ and b₁ → z → tanh → out — above the weight heatmap; below, the neuron diagram](docs/screenshot-inspector.png)
 ![3D view](docs/screenshot-3d.png)
 
 ## What it shows
@@ -93,7 +93,10 @@ One big view; everything else opens on demand, and one panel at a time (✕, Esc
   the unit circle/sphere, the basis vectors and the origin. Click or drag along the strip to see the
   objects after each layer — every layer is split into its **linear** step (`z = W a + b`) and its
   **activation** step (`a = σ(z)`), with a smooth morph in between.
-- **Network diagram and layer inspector.** ◫ in the strip opens a diagram of the network: one column per
+- **Network diagram and layer inspector.** The inspector first follows one point through the layer:
+  the origin or a basis vector (e₁ = (1, 0) enters layer 1 as itself, later layers receive it where it has
+  arrived), shown as in → `W` and `b` → `z = W·a + b` → σ → out; hovering an entry of `z` shows its whole
+  sum. ◫ in the strip opens a diagram of the network: one column per
   layer, edges coloured and weighted by `W` (gold positive, violet negative), neurons filled by their value
   at the probe point. Click a layer to inspect it: `W`/`b` heatmap with the change since initialization
   under each cell, singular values, rank, `det W`, norms; the activation `σ(z)` and `σ′(z)` with a
