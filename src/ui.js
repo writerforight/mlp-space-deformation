@@ -36,7 +36,7 @@
       objects: [],
       nPoints: 300,
       display: { grid: true, circle: true, basis: true, origin: true, jac: false, det: false, dist: false, autoFit: false },
-      train: { target: 'none', dataset: 'moons', transform: 'rotation', morph: MORPHS[dim][0].join('>'), amount: 0.9, optimizer: 'adam', lr: 0.01, batch: 32, stepsPerFrame: 5,
+      train: { target: 'none', dataset: 'moons', nData: 400, noise: 0.08, dataSeed: 0, transform: 'rotation', morph: MORPHS[dim][0].join('>'), amount: 0.9, optimizer: 'adam', lr: 0.01, batch: 32, stepsPerFrame: 5,
         redrawEvery: 10, mode: 'joint', stepsPerTask: 300, nTasks: 3, method: 'none', lambda: 100 },
       pins: [],
       custom: [],          // painted points for the "paint your own" dataset: [{ x, label }]
@@ -173,13 +173,14 @@
   }
 
   function buildData() {
-    const rng = new NN.Rng(S.net.init.seed * 101 + 5);
+    // dataSeed 0 keeps the data tied to the weight seed (as before); the guided start can draw another sample
+    const rng = new NN.Rng(S.net.init.seed * 101 + 5 + 7919 * (S.train.dataSeed || 0));
     targetA = null;
     if (usesClasses()) {
       const ds = S.train.dataset;
       const raw = ds === 'custom' ? S.custom.map((p) => ({ x: Float64Array.from(p.x), y: p.label }))
         : ds.startsWith('shape:') ? NN.makeShape(ds.slice(6)).components.flatMap((c) => c.pts.map((x) => ({ x, y: c.label })))
-        : NN.makeDataset(ds, 400, S.dim, rng);
+        : NN.makeDataset(ds, S.train.nData || 400, S.dim, rng, S.train.noise ?? 0.08);
       data = raw.map((s) => ({ x: s.x, label: s.y, y: isAnchors() ? anchor(s.y) : s.y }));
     } else if (isTransform()) {
       targetA = NN.targetMatrix(S.train.transform, S.dim, S.train.amount);
@@ -1274,19 +1275,27 @@
    * data — architecture, activations, initialisation, optimiser and the view.  Nothing else in the app
    * changes settings on its own; this button is the only "auto" behaviour.
    */
+  /** [layers, width] that train well for a task and data set (shared with the guided start). */
+  function recommendedArch(d, target, dataset) {
+    if (target === 'anchors' || target === 'classify') {
+      return { blobs: [2, d], moons: [4, d], circles: [4, d === 3 ? 6 : 4], rings: [5, 6], xor: [3, 4], wave: [4, 6],
+        spirals: [6, 6], checker: [6, 8], linked: [4, 4], custom: [5, 6] }[dataset] || (dataset.startsWith('shape:') ? [4, d + 1] : [4, 6]);
+    }
+    if (target === 'transform') return [2, 4];
+    if (target === 'morph') return [4, d + 1];
+    if (target === 'pins') return [3, 6];
+    return [3, d];
+  }
+
+  /** Initialisation that goes with a task: Xavier for training, strong He weights for "just look". */
+  const initFor = (target) => (target !== 'none' ? { dist: 'xavier', scale: 1 } : { dist: 'he', scale: 1.6 });
+
   function applyRecommended() {
-    const d = S.dim, T = S.train;
-    let arch;
-    if (T.target === 'anchors' || T.target === 'classify') {
-      arch = { blobs: [2, d], moons: [4, d], circles: [4, d === 3 ? 6 : 4], rings: [5, 6], xor: [3, 4], wave: [4, 6],
-        spirals: [6, 6], checker: [6, 8], linked: [4, 4], custom: [5, 6] }[T.dataset] || (T.dataset.startsWith('shape:') ? [4, d + 1] : [4, 6]);
-    } else if (T.target === 'transform') arch = [2, 4];
-    else if (T.target === 'morph') arch = [4, d + 1];
-    else if (T.target === 'pins') arch = [3, 6];
-    else arch = [3, d];
+    const T = S.train;
+    const arch = recommendedArch(S.dim, T.target, T.dataset);
     const training = T.target !== 'none';
     Object.assign(S.net, { layers: arch[0], width: arch[1], defaultAct: 'tanh', temperature: 0, overrides: [],
-      outputLinear: training, homeo: false, init: { ...S.net.init, dist: training ? 'xavier' : 'he', scale: training ? 1 : 1.6 } });
+      outputLinear: training, homeo: false, init: { ...S.net.init, ...initFor(T.target) } });
     Object.assign(T, { optimizer: 'adam', lr: 0.01, batch: 32, stepsPerFrame: 10, redrawEvery: 10 });
     training_stop();
     rebuildNet();
@@ -1295,6 +1304,35 @@
     flashHint(`★ Recommended: ${arch[0]} layers, width ${arch[1]}, tanh${training ? ', linear output, Xavier init' : ', He init ×1.6'}, Adam lr 0.01 — view fitted.`);
   }
   function training_stop() { training = false; updateTrainStatus(); }
+
+  /**
+   * Set everything the guided start chose: dimension, task, data and network.
+   *   g = { dim, problem, data: {dataset, n, noise, seed} | {map, amount} | {pair}, network: {layers, width, act, outputLinear} }
+   * The weight seed stays at its default, so the data sample is the one the guide showed.
+   */
+  function applyGuided(g) {
+    training_stop();
+    setDim(g.dim);
+    const T = S.train, d = g.data || {};
+    T.target = g.problem;
+    if (g.problem === 'classify') Object.assign(T, { dataset: d.dataset, nData: d.n, noise: d.noise, dataSeed: d.seed || 0 });
+    else if (g.problem === 'transform') Object.assign(T, { transform: d.map, amount: d.amount });
+    else if (g.problem === 'morph') T.morph = d.pair;
+    Object.assign(T, { optimizer: 'adam', lr: 0.01, batch: 32, stepsPerFrame: 10, redrawEvery: 10, mode: 'joint', method: 'none' });
+    const n = g.network;
+    Object.assign(S.net, { layers: n.layers, width: n.width, defaultAct: n.act, temperature: 0, overrides: [],
+      outputLinear: n.outputLinear, homeo: false, init: { ...defaultState(g.dim).net.init, ...initFor(g.problem) } });
+    t = 0; anim = null; playing = false;
+    syncTargetUI();
+    rebuildNet();
+    syncControls();
+    fitView();
+    const sec = document.querySelector(g.problem === 'none' ? 'details[data-sec="network"]' : 'details[data-sec="training"]');
+    if (sec) sec.open = true;
+    flashHint(g.problem === 'none'
+      ? 'Press ▶ under the view (or Space) to send the grid through the network, layer by layer.'
+      : 'Press ▶ Train (or T) to start training, and watch the space bend.');
+  }
 
   // ===========================================================================
   // Shapes and topology experiments
@@ -1876,6 +1914,7 @@
     document.addEventListener('keydown', (e) => {
       const tag = (e.target.tagName || '').toLowerCase();
       if (tag === 'input' || tag === 'select' || tag === 'textarea' || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (document.body.classList.contains('wizard-open')) return;
       if (e.key === ' ') { e.preventDefault(); $('play').click(); }
       else if (e.key === 'ArrowRight') { e.preventDefault(); $('stepFwd').click(); }
       else if (e.key === 'ArrowLeft') { e.preventDefault(); $('stepBack').click(); }
@@ -1909,7 +1948,7 @@
     window.__app = { get S() { return S; }, get net() { return net; }, get trainer() { return trainer; }, setDim, importState,
       get t() { return t; }, set t(v) { t = v; }, setTool, finishDrawing, get traces() { return traces; },
       serializeState, get training() { return training; }, set training(v) { training = v; }, viz2,
-      selectLayer, get inspect() { return inspect; }, get history() { return history; } };
+      selectLayer, get inspect() { return inspect; }, get history() { return history; }, applyGuided, recommendedArch, initFor };
   }
 
   init();

@@ -15,6 +15,16 @@ Adam, Jacobians, PCA, the neural tangent kernel and the continual-learning metho
 first principles in plain JavaScript (`src/nn.js`, with comments). Three.js (loaded from a CDN) is used
 only to draw the 3D view.
 
+## Guided start
+
+The page opens with a short guided start: pick **2D or 3D**, then a **problem** (classification, copy a
+linear map, shape to shape, or just look), then the **data** (each card opens with its settings: number
+of points, noise, map strength), then the **network**, drawn as its actual weight matrices with the
+starting weights. Every card plays a small preview computed by a tiny network trained in the page.
+*Open the workspace* applies all choices; **I know how to use it** (or a link ending in `#workspace`)
+goes straight to the full workspace, and **Guided start** in the header opens the guide again.
+Code: `src/wizard.js` (flow) and `src/minis.js` (previews).
+
 ## Things to try
 
 1. **Watch a network bend space.** Press ▶ under the view: the grid, the unit circle and the example

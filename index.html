@@ -192,6 +192,97 @@
     #stageLabel { top: auto; bottom: 30px; }
     #controls { max-height: none; border-right: none; }
   }
+
+  /* ======================= guided start (src/wizard.js) ======================= */
+  #wizard { position: fixed; inset: 0; z-index: 50; background: var(--bg); display: flex; flex-direction: column;
+    transition: opacity 0.28s ease; }
+  #wizard.closing { opacity: 0; pointer-events: none; }
+  body.wizard-open { overflow: hidden; }
+  .wz-top { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--line);
+    background: var(--panel); min-height: 49px; }
+  .wz-brand { font-weight: 650; font-size: 15px; margin-right: 8px; }
+  #wzSteps { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+  #wzSteps button { background: none; border: none; color: var(--muted); padding: 4px 8px; display: flex; align-items: center; gap: 6px; }
+  #wzSteps button .n { width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--line); display: inline-grid;
+    place-items: center; font-size: 11px; }
+  #wzSteps button.done { color: var(--text); }
+  #wzSteps button.done .n { background: var(--panel2); border-color: var(--muted); }
+  #wzSteps button.now { color: var(--text); font-weight: 650; }
+  #wzSteps button.now .n { background: var(--accent2); border-color: var(--accent); }
+  #wzSteps button:disabled { cursor: default; opacity: 0.45; }
+  #wzSteps button.now:disabled { opacity: 1; }
+  #wzSteps button.done:not(:disabled):hover { color: var(--accent); }
+  #wzSteps .sep { color: var(--line); }
+  .wz-top .spacer { flex: 1; }
+  .wz-link { background: none; border: none; color: var(--muted); }
+  .wz-link:hover { color: var(--text); }
+  .wz-stage { position: relative; flex: 1; overflow: hidden; }
+  .wz-screen { position: absolute; inset: 0; overflow-y: auto; padding: 48px 16px 40px; display: flex; flex-direction: column;
+    align-items: center; opacity: 0; visibility: hidden; transform: translateX(0);
+    scrollbar-color: #30363d var(--bg); scrollbar-width: thin;
+    transition: transform 0.28s ease, opacity 0.28s ease, visibility 0s linear 0.28s; }
+  .wz-screen.active { opacity: 1; visibility: visible; transition: transform 0.28s ease, opacity 0.28s ease; }
+  .wz-screen.enter-right { transform: translateX(60px); transition: none; }
+  .wz-screen.enter-left { transform: translateX(-60px); transition: none; }
+  .wz-screen.leave-left { transform: translateX(-60px); }
+  .wz-screen.leave-right { transform: translateX(60px); }
+  .wz-screen h2 { font-size: 26px; font-weight: 650; margin: 0 0 6px; text-align: center; }
+  .wz-screen .lead { color: var(--muted); font-size: 15px; margin: 0 0 32px; text-align: center; max-width: 620px; }
+  .wz-cards { display: grid; gap: 20px; width: 100%; max-width: 1060px; justify-content: center;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 240px)); }
+  .wz-cards.two { grid-template-columns: repeat(auto-fit, minmax(240px, 300px)); }
+  .wz-card { display: flex; flex-direction: column; gap: 10px; padding: 14px; text-align: left; white-space: normal;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px; cursor: pointer;
+    transition: transform 0.15s ease, border-color 0.15s ease; }
+  .wz-card:hover, .wz-card:focus-visible { transform: translateY(-3px); border-color: var(--accent); outline: none; }
+  .wz-card.picked { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .wz-card .pv { aspect-ratio: 1; border-radius: 8px; background: var(--bg); border: 1px dashed var(--line);
+    display: grid; place-items: center; color: var(--muted); font-size: 12px; }
+  .wz-card .pv.live { border: 1px solid var(--line); }
+  .wz-card .pv canvas { width: 100%; height: 100%; display: block; }
+  .wz-card .t { font-size: 16px; font-weight: 650; }
+  .wz-card .d { color: var(--muted); font-size: 13px; }
+  .wz-intro { flex: 1; justify-content: center; }
+  .wz-intro h2 { font-size: 34px; }
+  .wz-actions { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+  .wz-actions button { font-size: 15px; padding: 10px 22px; border-radius: 8px; }
+  .wz-placeholder { width: 100%; max-width: 980px; min-height: 260px; border: 1px dashed var(--line); border-radius: 12px;
+    display: grid; place-items: center; color: var(--muted); margin-bottom: 24px; }
+  .wz-sub { width: 100%; display: flex; flex-direction: column; align-items: center; }
+  .wz-groups { width: 100%; max-width: 1060px; display: flex; flex-direction: column; gap: 22px; }
+  .wz-group h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 0 0 10px; font-weight: 650; }
+  .wz-groups .wz-cards { justify-content: start; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 14px; max-width: none; }
+  .wz-groups .wz-card { padding: 10px; gap: 6px; }
+  .wz-groups .wz-card .t { font-size: 14px; }
+  .wz-detail { display: grid; grid-template-columns: minmax(0, 460px) minmax(0, 360px); gap: 32px; width: 100%; max-width: 860px; align-items: start; }
+  .wz-big { aspect-ratio: 1; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 8px; }
+  .wz-big canvas { width: 100%; height: 100%; display: block; }
+  .wz-side h2 { text-align: left; margin: 10px 0 6px; }
+  .wz-blurb { color: var(--muted); font-size: 14px; margin: 0 0 18px; }
+  #wzDetControls .row > label:first-child { width: 90px; }
+  #wzDetControls .note { margin: 2px 0 10px; }
+  .wz-actions.left { justify-content: flex-start; margin-top: 20px; }
+  #wzSteps button.skip .n { border-style: dashed; }
+  #wzSteps button.skip { text-decoration: line-through; }
+  @media (max-width: 760px) { .wz-detail { grid-template-columns: 1fr; } }
+  .wz-net { width: 100%; max-width: 1060px; display: flex; flex-direction: column; align-items: center; gap: 14px; margin-bottom: 26px; }
+  .wz-presets { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+  .wz-presets button { padding: 6px 14px; }
+  .wz-diagram { width: 100%; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px 14px;
+    display: flex; justify-content: center; overflow-x: auto; }
+  #wzNetSvg { display: block; width: 100%; height: auto; max-height: 340px; }
+  #wzNetSvg text { font: 12px ui-sans-serif, system-ui, sans-serif; fill: var(--muted); }
+  #wzNetSvg text.lbl { fill: var(--text); font-weight: 600; }
+  #wzNetSvg text.pill { fill: var(--text); font-size: 11px; }
+  .wz-net-info { color: var(--text); font-size: 14px; font-variant-numeric: tabular-nums; }
+  .wz-net-info .tag { font-size: 13px; }
+  .wz-net-controls { width: 100%; max-width: 440px; }
+  .wz-net-controls .row > label:first-child { width: 110px; }
+  #wzNetNotes { max-width: 640px; }
+  #wzNetNotes:empty { display: none; }
+  @media (prefers-reduced-motion: reduce) {
+    .wz-screen, .wz-screen.active, #wizard, .wz-card { transition: none; }
+  }
 </style>
 </head>
 <body>
@@ -205,6 +296,7 @@
   <button id="exportBtn" data-tip="Download the full setup (architecture, seed, weights, objects, pins, settings) as JSON.">Export JSON</button>
   <button id="importBtn" data-tip="Load a setup exported with “Export JSON”.">Import JSON</button>
   <input id="importFile" type="file" accept="application/json,.json" class="hidden">
+  <button id="guideBtn" data-tip="Open the step-by-step start again: dimension, problem, data, network.">Guided start</button>
   <button id="helpBtn" data-tip="Quick guide and keyboard shortcuts">?</button>
   <a href="https://github.com/writerforight/mlp-space-deformation" target="_blank" rel="noopener">GitHub</a>
   <div id="helpPanel" class="hidden">
@@ -496,6 +588,95 @@
 </div>
 <div id="tip" class="hidden"></div>
 
+<!-- ======================= guided start (src/wizard.js) ======================= -->
+<div id="wizard" class="hidden">
+  <div class="wz-top">
+    <span class="wz-brand">Neural Space Deformation</span>
+    <button id="wzBack" class="wz-link hidden">← Back</button>
+    <nav id="wzSteps">
+      <button data-goto="dimension"><span class="n">1</span>Dimension</button><span class="sep">›</span>
+      <button data-goto="problem"><span class="n">2</span>Problem</button><span class="sep">›</span>
+      <button data-goto="data"><span class="n">3</span>Data</button><span class="sep">›</span>
+      <button data-goto="network"><span class="n">4</span>Network</button>
+    </nav>
+    <span class="spacer"></span>
+    <button id="wzSkipTop" class="wz-link">Skip to workspace →</button>
+  </div>
+  <div class="wz-stage">
+    <section class="wz-screen wz-intro" data-step="intro">
+      <h2>Neural Space Deformation</h2>
+      <p class="lead">Watch a small neural network bend space, layer by layer, and see how training reshapes it.</p>
+      <div class="wz-actions">
+        <button id="wzStart" class="primary">Start the guided demo</button>
+        <button id="wzSkip">I know how to use it</button>
+      </div>
+    </section>
+    <section class="wz-screen" data-step="dimension">
+      <h2>How many dimensions?</h2>
+      <p class="lead">The network maps points of the plane or of space to the same kind of space.</p>
+      <div class="wz-cards two">
+      <button class="wz-card" data-key="dim" data-value="2"><div class="pv live"><canvas></canvas></div><div class="t">2D</div><div class="d">Points in the plane. Everything is visible at once.</div></button>
+      <button class="wz-card" data-key="dim" data-value="3"><div class="pv live"><canvas></canvas></div><div class="t">3D</div><div class="d">Points in space. Rotate the view to look around.</div></button>
+      </div>
+    </section>
+    <section class="wz-screen" data-step="problem">
+      <h2>What should the network do?</h2>
+      <p class="lead">Each card shows what happens in that problem.</p>
+      <div class="wz-cards">
+      <button class="wz-card" data-key="problem" data-value="classify"><div class="pv live"><canvas></canvas></div><div class="t">Classification</div><div class="d" data-d2="Pull two classes apart so a straight line separates them." data-d3="Pull two classes apart so a flat plane separates them.">Pull two classes apart so a straight line separates them.</div></button>
+      <button class="wz-card" data-key="problem" data-value="transform"><div class="pv live"><canvas></canvas></div><div class="t">Copy a linear map</div><div class="d">Learn a rotation, shear or scaling.</div></button>
+      <button class="wz-card" data-key="problem" data-value="morph"><div class="pv live"><canvas></canvas></div><div class="t">Shape to shape</div><div class="d">Turn one shape into another.</div></button>
+      <button class="wz-card" data-key="problem" data-value="none"><div class="pv live"><canvas></canvas></div><div class="t">Just look</div><div class="d">No training: see how a random network bends space.</div></button>
+      </div>
+    </section>
+    <section class="wz-screen" data-step="data">
+      <div id="wzDataList" class="wz-sub">
+        <h2 id="wzDataTitle">Which data?</h2>
+        <p class="lead" id="wzDataLead">Pick a data set; you can adjust it inside.</p>
+        <div id="wzDataCards" class="wz-groups"></div>
+      </div>
+      <div id="wzDataDetail" class="wz-sub hidden">
+        <div class="wz-detail">
+          <div class="wz-big"><canvas id="wzDataCanvas"></canvas></div>
+          <div class="wz-side">
+            <button id="wzDataBack" class="wz-link">← All choices</button>
+            <h2 id="wzDetTitle"></h2>
+            <p class="wz-blurb" id="wzDetBlurb"></p>
+            <div id="wzDetControls"></div>
+            <div class="wz-actions left"><button id="wzDataUse" class="primary">Use this →</button></div>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section class="wz-screen" data-step="network">
+      <h2>Build the network</h2>
+      <p class="lead">Each layer is a weight matrix W and a bias b, followed by an activation.
+        The colours are the actual starting weights (gold +, violet −).</p>
+      <div class="wz-net">
+        <div class="wz-presets" id="wzPresets">
+          <button data-preset="recommended" data-tip="Layers and width that train well for your problem and data.">★ Recommended</button>
+          <button data-preset="shallow" data-tip="Two layers, wide: one bend of space, made of many neurons.">Shallow</button>
+          <button data-preset="deep" data-tip="Six layers: many small bends, one after another.">Deep</button>
+          <button data-preset="wide" data-tip="Three layers of 16 neurons each.">Wide</button>
+        </div>
+        <div class="wz-diagram"><svg id="wzNetSvg" role="img" aria-label="Network as weight matrices"></svg></div>
+        <div class="wz-net-info" id="wzNetInfo"></div>
+        <div class="wz-net-controls">
+          <div class="row"><label data-tip="How many weight matrices (linear step + activation) the input passes through.">Layers</label>
+            <input id="wzLayers" type="range" min="1" max="8" step="1"><span class="val" id="wzLayersVal"></span></div>
+          <div class="row"><label data-tip="Neurons in each hidden layer = rows of the hidden weight matrices.">Hidden width</label>
+            <input id="wzWidth" type="range" min="1" max="16" step="1"><span class="val" id="wzWidthVal"></span></div>
+          <div class="row"><label data-tip="The function applied to every number after each linear step.">Activation</label>
+            <select id="wzAct"></select></div>
+          <div class="checks single"><label data-tip="No activation after the last matrix, so outputs can take any value. Usually what training wants."><input id="wzOutLin" type="checkbox"> Linear output layer</label></div>
+        </div>
+        <ul class="warnlist" id="wzNetNotes"></ul>
+      </div>
+      <div class="wz-actions"><button id="wzFinish" class="primary">Open the workspace →</button></div>
+    </section>
+  </div>
+</div>
+
 <!-- Three.js (classic build) for the 3D view; everything else is plain JavaScript in src/. -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="src/nn.js"></script>
@@ -503,5 +684,7 @@
 <script src="src/viz3d.js"></script>
 <script src="src/inspector.js"></script>
 <script src="src/ui.js"></script>
+<script src="src/minis.js"></script>
+<script src="src/wizard.js"></script>
 </body>
 </html>
