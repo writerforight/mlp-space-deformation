@@ -239,6 +239,28 @@ def check_info_box(b):
     assert b.js(st)[0]
 
 
+def check_touch_gestures(b):
+    """Two fingers pinch to zoom (2D and 3D) and pan; one finger still rotates the 3D view."""
+    pinch = """const el={el}, r=el.getBoundingClientRect(), cx=r.left+r.width/2, cy=r.top+r.height/2;
+      const E=(t,id,x,y)=>el.dispatchEvent(new PointerEvent(t,{{bubbles:true,pointerId:id,pointerType:'touch',clientX:x,clientY:y,button:0,buttons:1}}));
+      E('pointerdown',11,cx-40,cy); E('pointerdown',12,cx+40,cy);
+      for(let k=1;k<=8;k++){{E('pointermove',11,cx-40-10*k,cy+3*k);E('pointermove',12,cx+40+10*k,cy+3*k);}}
+      E('pointerup',11,cx-120,cy+24); E('pointerup',12,cx+120,cy+24);"""
+    b.open(dim=3)
+    o0 = b.js('const o=__app.viz3.orbit; return [o.radius,o.theta]')
+    b.js(pinch.format(el="document.querySelector('#c3d canvas')")); time.sleep(0.3)
+    o1 = b.js('const o=__app.viz3.orbit; return [o.radius,o.theta]')
+    assert o1[0] < 0.5 * o0[0] and o1[1] == o0[1], (o0, o1)      # zoomed in, not rotated
+    b.js("""const el=document.querySelector('#c3d canvas'), r=el.getBoundingClientRect(), cx=r.left+r.width/2, cy=r.top+r.height/2;
+      const E=(t,x)=>el.dispatchEvent(new PointerEvent(t,{bubbles:true,pointerId:21,pointerType:'touch',clientX:x,clientY:cy,button:0,buttons:1}));
+      E('pointerdown',cx); E('pointermove',cx+60); E('pointerup',cx+60);"""); time.sleep(0.2)
+    assert b.js('return __app.viz3.orbit.theta') != o1[1], 'one finger rotates'
+    b.js('__app.setDim(2)'); time.sleep(0.4)
+    s0 = b.js('return __app.viz2.scale')
+    b.js(pinch.format(el="document.getElementById('c2d')")); time.sleep(0.3)
+    assert b.js('return __app.viz2.scale') > 2 * s0
+
+
 def check_pins_goal(b):
     b.open()
     b.click('#drawerBtn'); time.sleep(0.2)
@@ -321,7 +343,7 @@ def check_narrow_screen(b):
     assert r[0] <= r[1] + 1 and r[2] <= r[3], r
 
 
-CHECKS = [check_guided_start, check_guided_goals_and_tour, check_shell_panels, check_strip, check_objects, check_goals, check_default_task_and_classes, check_info_box,
+CHECKS = [check_guided_start, check_guided_goals_and_tour, check_shell_panels, check_strip, check_objects, check_goals, check_default_task_and_classes, check_info_box, check_touch_gestures,
           check_pins_goal, check_timeline, check_view_background_and_tilt, check_dimension_switch, check_basis_box_and_inspector]
 
 

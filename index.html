@@ -345,6 +345,20 @@
   .more-list { display: flex; flex-direction: column; gap: 6px; padding: 10px; }
   .more-list a { padding: 4px 10px; }
   @media (max-width: 560px) { .lbl-long { display: none; } header h1 { font-size: 13px; } }
+  @media (max-width: 600px) {   /* phone: the compact strip (In · 1 · 2 · … · Out, src/strip.js) fills the row */
+    #stepBack, #stepFwd, #netToggle { display: none; }
+    #modelStrip { gap: 6px; padding: 6px; }
+    .ms-layers { gap: 5px; flex: 1; min-width: 0; }
+    .pipe { flex: 1 1 auto; justify-content: space-between; gap: 2px; padding: 6px 0 10px; }
+    .pipe .pn { padding: 6px 0; min-width: 21px; text-align: center; font-size: 13px; }
+    .pipe .pn.c { border: 1px solid var(--line); background: var(--panel2); border-radius: 6px; font-weight: 650; }
+    .pipe .pn.io { padding: 6px 4px; font-size: 12px; }
+    .pipe .pa { display: none; }
+    .ms-train { gap: 5px; padding-left: 6px; }
+    #trainPlay { padding: 6px 9px; }
+    #drawerBtn { padding: 6px 10px; }
+    .lbl-model { display: none; }
+  }
   @media (max-width: 820px) {
     .hdr-wide { display: none !important; }
     .hdr-narrow { display: inline-block; }
@@ -360,9 +374,10 @@
     #infoBox .fold-body { max-height: 42vh; }
     #basisBox table { font-size: 10px; }
     #stageLabel b { font-size: 12.5px; }
+    #hint.pan { display: none; }     /* phone: the plain view needs no instructions (two fingers zoom) */
   }
   @media (max-width: 900px) {
-    #drawer { grid-template-columns: 1fr; max-height: 55vh; overflow-y: auto; }
+    #drawer { grid-template-columns: 1fr; max-height: 55vh; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #30363d transparent; }
     #drawer .col { border-left: none; border-top: 1px solid var(--line); overflow: visible; }
     #sheet { width: 100%; }
     .ms-layers #ticks { display: none; }
@@ -449,6 +464,22 @@
   #wzSteps button.skip .n { border-style: dashed; }
   #wzSteps button.skip { text-decoration: line-through; }
   @media (max-width: 760px) { .wz-detail { grid-template-columns: 1fr; } }
+  @media (max-width: 600px) {   /* phone: one-row step bar (numbers; the current step named), two cards per row */
+    .wz-top { gap: 6px; padding: 8px 10px; flex-wrap: nowrap; }
+    #wzSteps { flex-wrap: nowrap; gap: 0; }
+    #wzSteps button { padding: 4px 4px; gap: 4px; font-size: 12px; }
+    #wzSteps button:not(.now) { font-size: 0; }
+    #wzSteps button:not(.now) .n { font-size: 11px; }
+    #wzSteps .sep { font-size: 11px; }
+    .wz-link { font-size: 12px; padding: 4px 2px; white-space: nowrap; }
+    .wz-screen { padding: 22px 12px 28px; }
+    .wz-screen h2 { font-size: 21px; }
+    .wz-screen .lead { font-size: 13.5px; margin-bottom: 18px; }
+    .wz-cards, .wz-cards.two, .wz-cards.five, .wz-groups .wz-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .wz-card { padding: 9px; gap: 6px; }
+    .wz-card .t { font-size: 14px; }
+    .wz-card .d { font-size: 12px; }
+  }
   .wz-net { width: 100%; max-width: 1060px; display: flex; flex-direction: column; align-items: center; gap: 14px; margin-bottom: 26px; }
   .wz-presets { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
   .wz-presets button { padding: 6px 14px; }
@@ -495,7 +526,7 @@
 </head>
 <body>
 <header>
-  <h1>Neural Space Deformation</h1>
+  <h1><span class="lbl-long">Neural </span>Space Deformation</h1>
   <span class="seg" data-tip="Dimension of the input and output space. 3D uses Three.js; objects are cleared when switching.">
     <button id="dim2" class="on">2D</button><button id="dim3">3D</button>
   </span>
@@ -871,7 +902,7 @@
       </div>
       <div class="ms-train">
         <button id="trainPlay" class="primary" data-tip="Start / pause training (key T).">▶ Train</button>
-        <button id="drawerBtn" data-tip="Network, goal and training settings.">Model ▲</button>
+        <button id="drawerBtn" data-tip="Network, goal and training settings."><span class="lbl-model">Model </span>▲</button>
       </div>
     </div>
   </main>
@@ -890,7 +921,7 @@
       <button data-goto="network"><span class="n">4</span>Network</button>
     </nav>
     <span class="spacer"></span>
-    <button id="wzSkipTop" class="wz-link">Skip to workspace →</button>
+    <button id="wzSkipTop" class="wz-link">Skip<span class="lbl-long"> to workspace</span> →</button>
   </div>
   <div class="wz-stage">
     <section class="wz-screen wz-intro" data-step="intro">
@@ -914,7 +945,7 @@
       <p class="lead">Each card shows what happens in that problem.</p>
       <div class="wz-cards five">
       <button class="wz-card" data-key="problem" data-value="classify"><div class="pv live"><canvas></canvas></div><div class="t">Classification</div><div class="d" data-d2="Pull two classes apart so a straight line separates them." data-d3="Pull two classes apart so a flat plane separates them.">Pull two classes apart so a straight line separates them.</div></button>
-      <button class="wz-card" data-key="problem" data-value="goals"><div class="pv live"><canvas></canvas></div><div class="t">Send classes anywhere</div><div class="d">Blue to a point A, red to a point B — you choose A and B, and can drag them while it trains.</div></button>
+      <button class="wz-card" data-key="problem" data-value="goals"><div class="pv live"><canvas></canvas></div><div class="t">Send classes anywhere</div><div class="d">Each class to its own point — you can drag the points while it trains.</div></button>
       <button class="wz-card" data-key="problem" data-value="transform"><div class="pv live"><canvas></canvas></div><div class="t">Copy a linear map</div><div class="d">Learn a rotation, shear or scaling.</div></button>
       <button class="wz-card" data-key="problem" data-value="morph"><div class="pv live"><canvas></canvas></div><div class="t">Shape to shape</div><div class="d">Turn one shape into another.</div></button>
       <button class="wz-card" data-key="problem" data-value="none"><div class="pv live"><canvas></canvas></div><div class="t">Just look</div><div class="d">No training: see how a random network bends space.</div></button>

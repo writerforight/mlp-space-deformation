@@ -29,6 +29,7 @@
       this.objects = new Map();
       this.allowRotate = () => true;
       this.onUserZoom = () => {};   // called when the user zooms or pans (ui.js turns auto-fit off)
+      this.onGestureStart = () => {};   // a two-finger gesture began (ui.js drops a half-done drag)
       this.addFixedAxes();
       this.bindControls();
       this.resize();
@@ -65,6 +66,15 @@
     bindControls() {
       const el = this.renderer.domElement;
       let drag = null;
+      // two fingers: pinch to zoom, move together to pan (one finger rotates, below)
+      touchGestures(el, (f, cx, cy, dx, dy) => {
+        this.orbit.radius = Math.min(200, Math.max(0.5, this.orbit.radius / f));
+        const s = this.orbit.radius / this.h;
+        const right = new THREE.Vector3().setFromMatrixColumn(this.camera.matrix, 0);
+        const up = new THREE.Vector3().setFromMatrixColumn(this.camera.matrix, 1);
+        this.target.addScaledVector(right, -dx * s).addScaledVector(up, dy * s);
+        this.onUserZoom();
+      }, () => { drag = null; this.onGestureStart(); });
       el.addEventListener('contextmenu', (e) => e.preventDefault());
       el.addEventListener('pointerdown', (e) => {
         if (!this.allowRotate(e)) return;

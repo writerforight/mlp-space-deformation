@@ -76,7 +76,7 @@
     const d = $('drawer'), show = d.classList.contains('hidden');
     d.classList.toggle('hidden', !show);
     $('drawerBtn').classList.toggle('on', show);
-    $('drawerBtn').textContent = show ? 'Model ▼' : 'Model ▲';
+    $('drawerBtn').innerHTML = `<span class="lbl-model">Model </span>${show ? '▼' : '▲'}`;
     redraw();
   };
 

@@ -1149,7 +1149,11 @@
       tb.appendChild(b);
     }
     const tip = toolList().find((x) => x[0] === tool);
-    $('hint').textContent = tip ? tip[2] : '';
+    // touch screens: say what fingers do, not the mouse
+    const touch = window.matchMedia('(hover: none)').matches;
+    $('hint').textContent = !tip ? '' : tool === 'pan' && touch
+      ? (S.dim === 3 ? 'One finger turns the view; two fingers zoom and move it.' : 'One finger moves the view; two fingers zoom.') : tip[2];
+    $('hint').classList.toggle('pan', tool === 'pan');
     const active = tool !== 'pan' && tip;
     $('toolChip').classList.toggle('hidden', !active);
     if (active) $('toolChip').innerHTML = `<b>${tip[1]}</b> tool <span class="tag">— click here, the tool again, or Esc to stop</span> ✕`;
@@ -1252,6 +1256,9 @@
   function bind2DMouse() {
     const cv = $('c2d');
     let pan = null, orbit = null;
+    // two fingers: pinch to zoom, move together to pan (whatever the tool)
+    touchGestures(cv, (f, cx, cy, dx, dy) => { viz2.zoomAt(cx, cy, f); viz2.panBy(dx, dy); userMovedView(); },
+      () => { pan = null; orbit = null; drawing = null; dragGoal = null; dragObj = null; });
     cv.addEventListener('contextmenu', (e) => e.preventDefault());
     cv.addEventListener('pointerdown', (e) => {
       const r = cv.getBoundingClientRect(), px = e.clientX - r.left, py = e.clientY - r.top, w = viz2.toWorld(px, py);
@@ -1372,6 +1379,7 @@
     viz3.allowRotate = (e) => !(e.button === 0 && tool === 'pan' && goalAt3(...pos(e))) && (tool === 'pan' || e.button === 2);
     viz3.onUserZoom = userMovedView;
     let drag3 = null;           // { g, z } while a goal's target is dragged on its horizontal plane
+    viz3.onGestureStart = () => { drag3 = null; };
     el.addEventListener('pointerdown', (e) => {
       if (e.button === 0 && tool === 'pan') {
         const g = goalAt3(...pos(e));
@@ -2881,7 +2889,7 @@
     requestAnimationFrame(frame);
     window.__app = { get S() { return S; }, get net() { return net; }, get trainer() { return trainer; }, setDim, importState,
       get t() { return t; }, set t(v) { t = v; }, setTool, finishDrawing, get traces() { return traces; },
-      serializeState, get training() { return training; }, set training(v) { training = v; }, viz2,
+      serializeState, get training() { return training; }, set training(v) { training = v; }, viz2, get viz3() { return viz3; },
       selectLayer, get inspect() { return inspect; }, get history() { return history; }, applyGuided, recommendedArch, initFor,
       animateTo, stageName, scrubTo, get playing() { return playing; }, showHistory, backToLive,
       get viewIdx() { return viewIdx; }, get historySteps() { return history.map((h) => h.step); }, restOfNetwork, computeTraces, get traces() { return traces; } };

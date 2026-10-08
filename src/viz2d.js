@@ -326,7 +326,47 @@
     return e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1);
   }
 
+  /**
+   * Two-finger touch gestures on an element: pinch to zoom, move both fingers to pan.  Register it before the
+   * element's other pointer handlers: while two fingers are (or were, until all lift) down, they see nothing.
+   *   onGesture(factor, cx, cy, dx, dy): zoom by factor about (cx, cy) (element pixels), then pan by (dx, dy)
+   *   onStart(): the second finger came down — cancel whatever the first one started
+   */
+  function touchGestures(el, onGesture, onStart) {
+    const pts = new Map();
+    let prev = null, active = false;
+    const geo = () => {
+      const [a, b] = [...pts.values()], r = el.getBoundingClientRect();
+      return { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, cx: (a.x + b.x) / 2 - r.left, cy: (a.y + b.y) / 2 - r.top };
+    };
+    el.addEventListener('pointerdown', (e) => {
+      if (e.pointerType !== 'touch') return;
+      pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pts.size === 2) { active = true; prev = geo(); onStart(); }
+      if (active) e.stopImmediatePropagation();
+    });
+    el.addEventListener('pointermove', (e) => {
+      if (!pts.has(e.pointerId)) return;
+      pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (!active) return;
+      e.stopImmediatePropagation();
+      if (pts.size < 2) return;
+      const g = geo();
+      onGesture(g.d / prev.d, g.cx, g.cy, g.cx - prev.cx, g.cy - prev.cy);
+      prev = g;
+    });
+    const end = (e) => {
+      if (!pts.delete(e.pointerId)) return;
+      if (active) e.stopImmediatePropagation();
+      if (pts.size === 0) active = false;
+      else if (pts.size === 1) prev = null;
+    };
+    el.addEventListener('pointerup', end);
+    el.addEventListener('pointercancel', end);
+  }
+
   root.Viz2D = Viz2D;
+  root.touchGestures = touchGestures;
   root.wheelPixels = wheelPixels;
   root.Charts = Charts;
   root.Colors = { divColor, seqColor };

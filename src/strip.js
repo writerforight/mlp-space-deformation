@@ -4,7 +4,9 @@
 
    Every half of a block is one stage of the animation (W = the linear step, the right half = the
    activation).  Click a stage to go there, drag along the strip to scrub, ⓘ opens the layer inspector.
-   A marker shows where the view is right now, also between stages.  Once there is training, a video-style
+   A marker shows where the view is right now, also between stages.  On a phone-wide screen the strip is
+   compact — In · 1 · 2 · … · Out, one button per layer (its output); tapping the current layer again opens
+   its inspector, and dragging along the strip still passes through every stage.  Once there is training, a video-style
    bar on the view shows the loss of the whole run: drag on it to see the network at an earlier step,
    ⏵ replays it, ● live returns.
 */
@@ -18,10 +20,21 @@
   let sig = '';
   let centers = [];             // x of every stage's slot, relative to the pipe
   let lastT = -1, lastSigDrawn = '';  // the marker only moves when the stage or the network changes
+  const phone = window.matchMedia('(max-width: 600px)');
+  let compact = phone.matches;
 
   function build() {
     const net = App.net;
     sig = net.acts.join() + '|' + net.dims.join();
+    if (compact) {
+      let h = '<button class="pn io" data-stage="0">In</button>';
+      net.acts.forEach((a, l) => {
+        h += `<span class="pa">·</span><button class="pn c" data-stage="${2 * l + 2}" data-layer="${l + 1}" data-tip="Layer ${l + 1}: W${l + 1} a + b${l + 1}, then ${a === 'identity' ? 'linear' : a}. Tap again to inspect it.">${l + 1}</button>`;
+      });
+      pipe.innerHTML = h + '<span class="pa">·</span><button class="pn io" data-stage="out">Out</button><div class="marker"></div>';
+      measure();
+      return;
+    }
     let h = '<button class="pn io" data-stage="0">Input</button>';
     net.acts.forEach((a, l) => {
       const last = l === net.nLayers - 1;
@@ -36,11 +49,15 @@
     measure();
   }
 
-  /** x centre of every stage slot: 0 = Input, 2l-1 = W_l, 2l = σ_l; the last stage also sits on Output. */
+  /**
+   * x centre of every stage slot: 0 = Input, 2l-1 = W_l, 2l = σ_l; the last stage also sits on Output.
+   * Stages without a button of their own (the linear steps of the compact strip) sit halfway between.
+   */
   function measure() {
     const box = pipe.getBoundingClientRect();
     const mid = (el) => { const r = el.getBoundingClientRect(); return r.left + r.width / 2 - box.left + pipe.scrollLeft; };
-    centers = [...pipe.querySelectorAll('.pn[data-stage]')].filter((b) => b.dataset.stage !== 'out').map(mid);
+    const known = new Map([...pipe.querySelectorAll('.pn[data-stage]')].filter((b) => b.dataset.stage !== 'out').map((b) => [+b.dataset.stage, mid(b)]));
+    centers = [...Array(2 * App.net.nLayers + 1)].map((_, k) => known.get(k) ?? (known.get(k - 1) + known.get(k + 1)) / 2);
   }
 
   function stageAtX(x) {
@@ -65,6 +82,7 @@
     if (e.target.id === 'layerMinus') { setLayers(App.net.nLayers - 1); return; }
     const slot = e.target.closest('.pn[data-stage]');
     if (!slot || dragged) return;
+    if (slot.dataset.layer && slot.classList.contains('now')) { App.selectLayer(+slot.dataset.layer, false); return; }
     const s = slot.dataset.stage === 'out' ? 2 * App.net.nLayers : +slot.dataset.stage;
     App.animateTo(s);
     if (App.inspect && s > 0) App.inspect.layer = Math.ceil(s / 2);
@@ -86,6 +104,7 @@
   });
   window.addEventListener('pointerup', () => { drag = null; setTimeout(() => { dragged = false; }, 0); });
   window.addEventListener('resize', () => requestAnimationFrame(() => { measure(); lastT = -1; }));
+  phone.addEventListener('change', () => { compact = phone.matches; build(); lastT = -1; });
 
   // ---- training timeline: the loss over all steps; drag on it to watch the network at an earlier step -----
   const spark = $('lossSpark');
@@ -186,7 +205,8 @@
       const s = Math.round(t), near = Math.abs(t - s) < 0.02;
       pipe.querySelectorAll('.pn[data-stage]').forEach((b) => {
         const k = b.dataset.stage === 'out' ? n : +b.dataset.stage;
-        b.classList.toggle('now', near && k === s);
+        // compact: a layer's button stands for both its stages (linear step and activation)
+        b.classList.toggle('now', near && (b.dataset.layer ? s > 0 && Math.ceil(s / 2) === +b.dataset.layer : k === s));
       });
     }
     drawSpark();
