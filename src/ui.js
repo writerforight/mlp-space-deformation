@@ -573,18 +573,25 @@
     return out;
   }
 
-  /** Small axes in the corner while the view is tilted: which way the two view directions and depth point. */
+  /**
+   * Small axes in the corner: in 2D while the view is tilted (the two view directions and depth), in 3D
+   * always (x, y, z as the camera sees them; an axis pointing away from the viewer is drawn fainter).
+   */
   function renderGizmo(depth, pca) {
-    const g = $('gizmo');
-    g.classList.toggle('hidden', !tilted());
-    if (!tilted()) return;
-    const c = 42, k = 28, names = pca ? ['PC1', 'PC2', depth ? 'PC3' : 'depth'] : ['x', 'y', 'depth'];
+    const g = $('gizmo'), show = S.dim === 3 ? !!viz3 : tilted();
+    g.classList.toggle('hidden', !show);
+    if (!show) return;
+    const c = 42, k = 28, names = S.dim === 3 ? (pca ? ['PC1', 'PC2', 'PC3'] : ['x', 'y', 'z'])
+      : pca ? ['PC1', 'PC2', depth ? 'PC3' : 'depth'] : ['x', 'y', 'depth'];
     const cols = ['#ff6b6b', '#51cf66', '#4dabf7'];
-    const ax = [[1, 0, 0], [0, 1, 0], [0, 0, 1]].map((v) => camXY(v[0], v[1], v[2]));
-    g.innerHTML = ax.map((q, i) => {
-      const x = c + k * q[0], y = c - k * q[1];
-      return `<line x1="${c}" y1="${c}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" stroke="${cols[i]}" stroke-width="2" stroke-linecap="round"${i === 2 && !depth ? ' stroke-dasharray="3 3"' : ''}/>
-        <text x="${(c + (k + 9) * q[0]).toFixed(1)}" y="${(c - (k + 9) * q[1] + 3).toFixed(1)}" fill="${cols[i]}" font-size="9.5" text-anchor="middle">${names[i]}</text>`;
+    if (S.dim === 3) { viz3.updateCamera(); viz3.camera.updateMatrixWorld(); }
+    const ax = [[1, 0, 0], [0, 1, 0], [0, 0, 1]].map((v) => (S.dim === 3
+      ? new THREE.Vector3(...v).transformDirection(viz3.camera.matrixWorldInverse).toArray() : camXY(v[0], v[1], v[2])));
+    const order = [0, 1, 2].sort((a, b) => (ax[a][2] || 0) - (ax[b][2] || 0));     // farthest first, nearest on top
+    g.innerHTML = order.map((i) => {
+      const q = ax[i], x = c + k * q[0], y = c - k * q[1], faint = S.dim === 3 && q[2] < -0.2 ? ' opacity="0.45"' : '';
+      return `<g${faint}><line x1="${c}" y1="${c}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" stroke="${cols[i]}" stroke-width="2" stroke-linecap="round"${S.dim === 2 && i === 2 && !depth ? ' stroke-dasharray="3 3"' : ''}/>
+        <text x="${(c + (k + 9) * q[0]).toFixed(1)}" y="${(c - (k + 9) * q[1] + 3).toFixed(1)}" fill="${cols[i]}" font-size="9.5" text-anchor="middle">${names[i]}</text></g>`;
     }).join('') + `<circle cx="${c}" cy="${c}" r="2" fill="#e6edf3"/>`;
   }
 
@@ -2475,6 +2482,7 @@
       cam.yaw, cam.pitch, tool, drawing ? 1 : 0, S.dim].join('|');
   }
 
+  let gizmoKey = '';
   function frame(now) {
     advanceAnimation(now);
     if (training) trainSteps(S.train.stepsPerFrame);
@@ -2487,6 +2495,10 @@
     }
     if (now - lastLossDraw > 120 && training) { if (isOpen('loss')) drawLoss(); lastLossDraw = now; }
     if (now - lastInspector > (training ? 120 : 60)) { lastInspector = now; try { renderInspectorAndNet(); } catch (err) { console.error(err); } }
+    if (S.dim === 3 && viz3) {
+      const o = viz3.orbit, key = `${o.theta.toFixed(3)}|${o.phi.toFixed(3)}|${lastSig}`;
+      if (key !== gizmoKey) { gizmoKey = key; renderStageUI(); }
+    }
     renderSummaries();
     updateObjLog(now);
     renderMats(false);
