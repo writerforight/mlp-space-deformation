@@ -37,7 +37,18 @@
   #tlStack { position: absolute; top: 10px; left: 12px; z-index: 4; display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
     max-width: min(460px, 45%); pointer-events: none; }
   #basisBox { background: rgba(13, 17, 23, 0.82); border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px; font-size: 12px; }
+  /* info panels on the view: the title folds the details away (src/ui.js setupFolds) */
+  .fold-head { display: flex; align-items: center; width: 100%; background: none; border: none; padding: 0; margin: 0;
+    color: inherit; font: inherit; text-align: left; cursor: pointer; pointer-events: auto; }
+  .fold-head:hover { color: var(--text); }
+  .fold-head .caret { margin-right: 6px; }
+  .fold-head .caret::before { content: '▾'; color: var(--muted); font-size: 11px; }
+  .fold.closed .fold-head .caret::before { content: '▸'; }
+  .fold.closed .fold-body { display: none; }
   #basisBox .bx-title { color: var(--muted); font-size: 11px; margin-bottom: 4px; }
+  #basisBox.closed .bx-title { margin-bottom: 0; }
+  #legend .fold-head { color: var(--muted); font-size: 11px; margin-bottom: 3px; }
+  #legend.closed .fold-head { margin-bottom: 0; }
   #basisBox table { border-collapse: collapse; font: 11.5px ui-monospace, SFMono-Regular, Menlo, monospace; }
   #basisBox th { color: var(--muted); font-weight: 500; text-align: left; padding: 1px 8px 3px 0; border: none; font-family: ui-sans-serif, system-ui, sans-serif; }
   #basisBox td { text-align: left; padding: 1px 8px 1px 0; border: none; white-space: nowrap; color: var(--muted); }
@@ -342,8 +353,9 @@
     .ms-train { padding-left: 8px; }
     #timeline { width: calc(100% - 24px); bottom: 70px; }
     #gizmo { bottom: 124px; }
-    #tlStack { max-width: 62%; }
-    #legend { max-width: 45%; }
+    #tlStack { max-width: 56%; }
+    #legend { max-width: 40%; }
+    .fold.closed .fold-head { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
   }
   @media (max-width: 900px) {
     #drawer { grid-template-columns: 1fr; max-height: 55vh; overflow-y: auto; }
@@ -533,7 +545,7 @@
         <div id="stageLabel"></div>
         <div id="basisBox" class="hidden"></div>
       </div>
-      <div id="legend" class="hidden"></div>
+      <div id="legend" class="hidden"><button class="fold-head" data-fold="legend" data-tip="Show / hide the explanation"><span class="caret"></span>Background colours</button><div id="legendText" class="fold-body"></div></div>
       <div id="hint"></div>
       <svg id="gizmo" class="hidden" width="84" height="84" viewBox="0 0 84 84" aria-label="Axes of the tilted view"></svg>
       <button id="toolChip" class="hidden" data-tip="Back to the normal mode (pan the view)."></button>

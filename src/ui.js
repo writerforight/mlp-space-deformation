@@ -655,8 +655,8 @@
     const showBg = vd === 2 && usesClasses() && D.bg && !tilted() && bgClass(new Float64Array(vd)) !== null;
     if (showBg) items.push(backgroundImage(Math.round(tt)));
     // say what the colours are: a reading rule applied to the network's output, not part of the network
-    const legend = $('legend');
-    legend.classList.toggle('hidden', !showBg);
+    const legend = $('legendText');
+    $('legend').classList.toggle('hidden', !showBg);
     if (showBg) legend.textContent = !isClassify() && !goalSplit()
       ? 'Background colour: the class whose target point the rest of the network sends each spot nearest to, in that class\'s colour — brighter the clearer its lead over the next-nearest point; dark = halfway between two points.'
       : 'Background colour: the class whose logit wins at each spot, brighter the bigger its lead over the runner-up; dark = undecided. Full colour at a lead of 4.';
@@ -868,6 +868,26 @@
     return a.length <= 4 ? `(${a.map(f).join(', ')})` : `(${a.slice(0, 3).map(f).join(', ')}, … +${a.length - 3})`;   // hover shows all
   }
   let basisKey = '';
+  /**
+   * The see-through info panels on the view (stage, basis box, background legend): a click on the title
+   * folds the details away.  Remembered in this browser; on a phone-sized screen they start folded.
+   */
+  function setupFolds() {
+    const narrow = window.matchMedia && window.matchMedia('(max-width: 820px)').matches;
+    for (const [name, id] of [['stage', 'stageLabel'], ['basis', 'basisBox'], ['legend', 'legend']]) {
+      const saved = load(`nsd.fold.${name}`);
+      $(id).classList.add('fold');
+      $(id).classList.toggle('closed', saved === null ? narrow : saved === '1');
+    }
+    // pointerdown, not click: the stage title is redrawn while the view animates
+    document.addEventListener('pointerdown', (e) => {
+      const h = e.target.closest('.fold-head[data-fold]');
+      if (!h || e.button !== 0) return;
+      const closed = h.closest('.fold').classList.toggle('closed');
+      store(`nsd.fold.${h.dataset.fold}`, closed ? '1' : '0');
+    });
+  }
+
   function renderBasisBox() {
     const box = $('basisBox');
     if (!S.display.basisInfo || !net) { box.classList.add('hidden'); return; }
@@ -890,7 +910,7 @@
       cols = [2 * l - 2, 2 * l - 1, 2 * l]; now = s % 2 === 1 ? 1 : 2;
     }
     const title = s === 0 ? 'Origin and basis vectors before the network' : `Layer ${Math.ceil(s / 2)}: where o and the basis vectors go (real coordinates)`;
-    box.innerHTML = `<div class="bx-title">${title}</div><table><tr><th></th>${head.map((h, j) => `<th class="${j === now ? 'now' : ''}">${h}</th>`).join('')}</tr>${
+    box.innerHTML = `<button class="fold-head bx-title" data-fold="basis" data-tip="Show / hide the coordinates"><span class="caret"></span>${title}</button><table class="fold-body"><tr><th></th>${head.map((h, j) => `<th class="${j === now ? 'now' : ''}">${h}</th>`).join('')}</tr>${
       st.map((row, i) => `<tr><td class="k" style="color:${colors[i]}">${names[i]}</td>${cols.map((c, j) => `<td class="${j === now ? 'now' : ''}" title="${Array.from(row[c]).map((x) => x.toFixed(4)).join(', ')}">${fmtVec(row[c])}</td>`).join('')}</tr>`).join('')}</table>`;
   }
 
@@ -1009,12 +1029,13 @@
     sl.max = String(n - 1);
     if (document.activeElement !== sl) sl.value = String(t);
     const s = Math.round(t), near = Math.abs(t - s) < 0.02;
+    let title, lines;
     if (near) {
       const nm = stageName(s);
-      $('stageLabel').innerHTML = `<b>${nm.title}</b><br><span class="tag">${nm.sub}</span>`;
+      title = nm.title; lines = [nm.sub];
     } else {
       const a = stageName(Math.floor(t)), b = stageName(Math.ceil(t));
-      $('stageLabel').innerHTML = `<b>${a.title} → ${b.title}</b><br><span class="tag">morphing ${(100 * (t - Math.floor(t))).toFixed(0)}%</span>`;
+      title = `${a.title} → ${b.title}`; lines = [`morphing ${(100 * (t - Math.floor(t))).toFixed(0)}%`];
     }
     $('ticks').textContent = `stage ${t.toFixed(2)} / ${n - 1}`;
     $('play').textContent = playing ? '⏸' : '▶';
@@ -1022,10 +1043,13 @@
     if (P && !P.exact) {
       const D3 = depthInfo[Math.min(n - 1, Math.max(0, s))];
       const pct = (v) => (v >= 0.9995 ? '100' : v > 0.99 ? (Math.floor(1000 * v) / 10).toFixed(1) : (100 * v).toFixed(0));
-      $('stageLabel').innerHTML += `<br><span class="tag">ℝ${P.basis[0].length} shown through PCA: ${pct(P.explained)}% of the spread in 2 directions${
-        D3 ? `, ${pct(D3.explained)}% with depth — right-drag to tilt` : ''}</span>`;
+      lines.push(`ℝ${P.basis[0].length} shown through PCA: ${pct(P.explained)}% of the spread in 2 directions${
+        D3 ? `, ${pct(D3.explained)}% with depth — right-drag to tilt` : ''}`);
     }
-    if (tilted()) $('stageLabel').innerHTML += '<br><span class="tag">tilted view · double-click or ⟲ Flat to look straight down</span>';
+    if (tilted()) lines.push('tilted view · double-click or ⟲ Flat to look straight down');
+    const html = `<button class="fold-head" data-fold="stage" data-tip="Show / hide the details"><span class="caret"></span><b>${title}</b></button>`
+      + `<div class="fold-body">${lines.map((l) => `<span class="tag">${l}</span>`).join('<br>')}</div>`;
+    if ($('stageLabel').innerHTML !== html) $('stageLabel').innerHTML = html;   // unchanged: keep the button under the pointer
     renderGizmo(depthInfo[Math.min(n - 1, Math.max(0, s))], P && !P.exact);
   }
 
@@ -2820,6 +2844,7 @@
     setupControls();
     setupTooltips();
     setupInspector();
+    setupFolds();
     setupShortcuts();
     setupHelp();
     bind2DMouse();
