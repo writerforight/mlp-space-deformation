@@ -110,7 +110,7 @@
   const at = (ms, f) => { const id = setTimeout(f, ms); timers.push(id); };
   const timers = [];
   let t0 = performance.now(), morphFrom = null, ended = false, trained = false, raf = 0;
-  const MORPH = 7000, HOLD = 2500, BACK = 5000;
+  const MORPH = 13000, HOLD = 6000, BACK = 13000;   // unhurried: space untwists slowly, rests, then slowly returns
 
   function startMorph() {
     if (!trained) { at(120, startMorph); return; }
@@ -120,17 +120,16 @@
     if (ended) return;
     ended = true;
     timers.forEach(clearTimeout);
-    [1, 2, 3, 4].forEach((n) => line(n, false));
+    [1, 3, 4].forEach((n) => line(n, false));
     root.classList.add('ended');
     if (trained && morphFrom === null) morphFrom = performance.now() - MORPH;   // skipped: jump to the bent space
   }
   if (reduce) { root.classList.add('still'); }
-  at(500, () => line(1, true));
-  at(2500, () => line(2, true));
-  at(4200, () => { line(1, false); line(2, false); startMorph(); });
-  at(4600, () => line(3, true));
-  at(8600, () => { line(3, false); line(4, true); });
-  at(11800, finish);
+  at(700, () => line(1, true));
+  at(4200, () => { line(1, false); startMorph(); });
+  at(5000, () => line(3, true));
+  at(13500, () => { line(3, false); line(4, true); });
+  at(18800, finish);
 
   // train in small slices, so the opening keeps turning smoothly
   (function slice() {
@@ -182,7 +181,7 @@
     }
     setStage(u);
     soundFrame(u);
-    const a = reduce ? 0.7 : 0.7 + age * 0.12;      // a slow turn around the vertical, seen a little from above
+    const a = reduce ? 0.7 : 0.7 + age * 0.07;      // a slow turn around the vertical, seen a little from above
     camera.position.set(dist * Math.sin(a) * 0.98, dist * 0.2, dist * Math.cos(a) * 0.98);
     camera.lookAt(0, 0, 0);
     renderer.render(scene, camera);

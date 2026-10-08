@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Neural Space Deformation</title>
+<meta name="author" content="Eren Can Almaz">
 <meta name="description" content="Interactive visualization of how a small MLP deforms space, layer by layer, and how backpropagation reshapes it. Plain JavaScript, no ML libraries.">
 <!-- link previews (LinkedIn, Slack, X, …) -->
 <meta property="og:type" content="website">
@@ -33,6 +34,10 @@
     padding: 8px 14px; border-bottom: 1px solid var(--line); background: var(--panel);
   }
   header h1 { font-size: 15px; margin: 0 8px 0 0; font-weight: 650; letter-spacing: 0.01em; }
+  header .byline { color: var(--muted); font-size: 12px; text-decoration: none; margin: 2px 6px 0 -2px; white-space: nowrap; }
+  header .byline:hover { color: var(--text); }
+  .more-by { color: var(--muted); font-size: 12px; padding: 4px 10px 0; }
+  @media (max-width: 1199px) { header .byline { display: none; } }   /* only where the header has room for it */
   header .spacer { flex: 1; }
   /* workspace: one big view; everything else opens on top of it or in the model strip below it */
   #app { flex: 1; min-height: 0; }
@@ -408,7 +413,6 @@
   .intro-lines > div { grid-area: 1 / 1; align-self: end; }          /* every group in the same place */
   .intro-lines p { margin: 0; opacity: 0; filter: blur(8px); transform: translateY(10px);
     transition: opacity 1.1s ease, filter 1.1s ease, transform 1.1s ease; text-shadow: 0 2px 24px rgba(0, 0, 0, 0.8); }
-  .intro-lines p[data-l="2"] { font-weight: 500; margin-top: 0.25em; }
   .intro-lines p.show { opacity: 1; filter: blur(0); transform: none; }
   .intro-end { position: absolute; left: 0; right: 0; bottom: 9%; z-index: 1; text-align: center; padding: 0 20px;
     opacity: 0; transform: translateY(14px); transition: opacity 1.2s ease 0.2s, transform 1.2s ease 0.2s; pointer-events: none; }
@@ -416,6 +420,7 @@
   .intro-end h2 { margin: 0 0 8px; font-size: clamp(26px, 5vw, 50px); font-weight: 650; letter-spacing: -0.01em;
     background: linear-gradient(90deg, #79c0ff, #e6edf3 45%, #ff9b9b 75%, #7ee2a8); -webkit-background-clip: text; background-clip: text; color: transparent; }
   .intro-end p { margin: 0 0 22px; color: #9aa7b4; font-size: clamp(14px, 1.8vw, 18px); }
+  .intro-end p.intro-by { margin: -12px 0 20px; font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: #6e7781; }
   .intro-btns { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
   .intro-btns button { font-size: 16px; padding: 11px 22px; border-radius: 10px; }
   .intro-btns button.primary { box-shadow: 0 0 0 3px rgba(31, 111, 235, 0.25), 0 8px 28px rgba(31, 111, 235, 0.45); }
@@ -568,6 +573,7 @@
 <body>
 <header>
   <h1><span class="lbl-long">Neural </span>Space Deformation</h1>
+  <a class="byline hdr-wide" href="https://github.com/writerforight" target="_blank" rel="noopener">by Eren Can Almaz</a>
   <span class="seg" data-tip="Dimension of the input and output space. 3D uses Three.js; objects are cleared when switching.">
     <button id="dim2" class="on">2D</button><button id="dim3">3D</button>
   </span>
@@ -591,6 +597,7 @@
         <button data-proxy="guideBtn">Guided start</button>
         <button id="soundMore">Sound: on</button>
         <a href="https://github.com/writerforight/mlp-space-deformation" target="_blank" rel="noopener">GitHub</a>
+        <span class="more-by">© Eren Can Almaz</span>
       </div>
     </div>
   </span>
@@ -956,13 +963,14 @@
 <div id="intro" aria-label="Introduction">
   <div id="introGL"></div>
   <div class="intro-lines">
-    <div><p data-l="1">A neural network doesn't learn rules.</p><p data-l="2">It bends space.</p></div>
+    <div><p data-l="1">Neural networks bend space.</p></div>
     <div><p data-l="3">Layer by layer…</p></div>
     <div><p data-l="4">…until every class has its own place.</p></div>
   </div>
   <div class="intro-end">
     <h2>Neural Space Deformation</h2>
     <p>Watch a neural network bend space — live, in your browser.</p>
+    <p class="intro-by">by Eren Can Almaz</p>
     <div class="intro-btns"><button id="introTry" class="primary">Try it yourself</button><button id="introGuide">Guided tour</button></div>
   </div>
   <button class="intro-skip">Skip</button>

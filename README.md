@@ -335,4 +335,4 @@ If you use this in teaching or writing, please cite it — GitHub's **Cite this 
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+© 2026 Eren Can Almaz. All rights reserved — see [LICENSE](LICENSE). For permission (e.g. teaching use), get in touch via GitHub.
