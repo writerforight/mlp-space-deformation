@@ -36,7 +36,20 @@
   /* top left: the stage, and what this layer does to the basis vectors */
   #tlStack { position: absolute; top: 10px; left: 12px; z-index: 4; display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
     max-width: min(460px, 45%); pointer-events: none; }
-  #basisBox { background: rgba(13, 17, 23, 0.82); border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px; font-size: 12px; }
+  #infoBox { background: rgba(13, 17, 23, 0.84); border: 1px solid var(--line); border-radius: 8px; padding: 5px 9px; font-size: 12px;
+    pointer-events: auto; max-width: 100%; }
+  #infoBox .fold-head { color: var(--text); font-weight: 600; font-size: 12.5px; }
+  #infoBox .info-i { margin-right: 5px; color: var(--accent); }
+  #infoBox .info-dot { width: 7px; height: 7px; border-radius: 50%; margin-left: 7px; background: var(--accent); display: none; }
+  #infoBox.ping .info-dot { display: inline-block; }
+  #infoBox.ping { animation: infoPing 0.9s ease-in-out 4; }
+  @keyframes infoPing { 50% { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.35); } }
+  #infoBox .fold-body { margin-top: 6px; max-height: min(60vh, 520px); overflow: hidden auto; scrollbar-width: thin; scrollbar-color: #30363d transparent; }
+  #basisBox { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line); overflow-x: auto; scrollbar-width: thin; scrollbar-color: #30363d transparent; }
+  #infoFeed:not(:empty) { margin-top: 6px; padding-top: 4px; border-top: 1px solid var(--line); }
+  .info-item { padding: 4px 0; color: var(--text); line-height: 1.4; }
+  .info-item + .info-item { border-top: 1px dashed var(--line); }
+  .info-item .k { display: block; color: var(--muted); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; }
   /* info panels on the view: the title folds the details away (src/ui.js setupFolds) */
   .fold-head { display: flex; align-items: center; width: 100%; background: none; border: none; padding: 0; margin: 0;
     color: inherit; font: inherit; text-align: left; cursor: pointer; pointer-events: auto; }
@@ -46,9 +59,6 @@
   .fold.closed .fold-head .caret::before { content: '▸'; }
   .fold.closed .fold-body { display: none; }
   #basisBox .bx-title { color: var(--muted); font-size: 11px; margin-bottom: 4px; }
-  #basisBox.closed .bx-title { margin-bottom: 0; }
-  #legend .fold-head { color: var(--muted); font-size: 11px; margin-bottom: 3px; }
-  #legend.closed .fold-head { margin-bottom: 0; }
   #basisBox table { border-collapse: collapse; font: 11.5px ui-monospace, SFMono-Regular, Menlo, monospace; }
   #basisBox th { color: var(--muted); font-weight: 500; text-align: left; padding: 1px 8px 3px 0; border: none; font-family: ui-sans-serif, system-ui, sans-serif; }
   #basisBox td { text-align: left; padding: 1px 8px 1px 0; border: none; white-space: nowrap; color: var(--muted); }
@@ -66,15 +76,7 @@
   .mgrid span { min-width: 38px; padding: 2px 3px; text-align: right; border-radius: 3px; color: var(--text); }
   .mgrid span.h { color: var(--muted); background: none !important; text-align: center; }
   .mgrid span.gap { min-width: 6px; padding: 0; }
-  #stageLabel {
-    text-align: left; pointer-events: none;
-    background: rgba(13, 17, 23, 0.7); padding: 4px 8px; border-radius: 6px;
-  }
-  #stageLabel b { font-size: 14px; }
-  #legend {   /* top right, under View ▾: the top left holds the stage and the basis box, the bottom the timeline */
-    position: absolute; top: 52px; right: 12px; max-width: min(380px, 38%); pointer-events: none;
-    background: rgba(13, 17, 23, 0.78); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; font-size: 12px;
-  }
+  #stageLabel b { font-size: 13.5px; }
   #hint { position: absolute; bottom: 8px; left: 12px; color: var(--muted); pointer-events: none; font-size: 12px; }
   /* ---- model strip: layers ... | train | settings drawer ---- */
   #modelStrip { display: flex; align-items: center; gap: 14px; padding: 8px 12px; border-top: 1px solid var(--line); background: var(--panel); }
@@ -353,9 +355,11 @@
     .ms-train { padding-left: 8px; }
     #timeline { width: calc(100% - 24px); bottom: 70px; }
     #gizmo { bottom: 124px; }
-    #tlStack { max-width: 56%; }
-    #legend { max-width: 40%; }
-    .fold.closed .fold-head { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+    #tlStack { max-width: calc(100% - 110px); }      /* leaves room for View ▾ */
+    #infoBox { font-size: 11px; padding: 4px 8px; }
+    #infoBox .fold-body { max-height: 42vh; }
+    #basisBox table { font-size: 10px; }
+    #stageLabel b { font-size: 12.5px; }
   }
   @media (max-width: 900px) {
     #drawer { grid-template-columns: 1fr; max-height: 55vh; overflow-y: auto; }
@@ -542,10 +546,16 @@
       <canvas id="c2d"></canvas>
       <div id="c3d" class="hidden"></div>
       <div id="tlStack">
-        <div id="stageLabel"></div>
-        <div id="basisBox" class="hidden"></div>
+        <!-- one Info box: the stage and the basis table in a fixed place, notes below (newest first); src/ui.js setInfo -->
+        <div id="infoBox" class="fold closed">
+          <button class="fold-head" data-fold="info"><span class="caret"></span><span class="info-i">ⓘ</span>Info<span class="info-dot"></span></button>
+          <div class="fold-body">
+            <div id="stageLabel"></div>
+            <div id="basisBox" class="hidden"></div>
+            <div id="infoFeed"></div>
+          </div>
+        </div>
       </div>
-      <div id="legend" class="hidden"><button class="fold-head" data-fold="legend" data-tip="Show / hide the explanation"><span class="caret"></span>Background colours</button><div id="legendText" class="fold-body"></div></div>
       <div id="hint"></div>
       <svg id="gizmo" class="hidden" width="84" height="84" viewBox="0 0 84 84" aria-label="Axes of the tilted view"></svg>
       <button id="toolChip" class="hidden" data-tip="Back to the normal mode (pan the view)."></button>

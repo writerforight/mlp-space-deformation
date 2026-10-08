@@ -655,18 +655,17 @@
     const showBg = vd === 2 && usesClasses() && D.bg && !tilted() && bgClass(new Float64Array(vd)) !== null;
     if (showBg) items.push(backgroundImage(Math.round(tt)));
     // say what the colours are: a reading rule applied to the network's output, not part of the network
-    const legend = $('legendText');
-    $('legend').classList.toggle('hidden', !showBg);
-    if (showBg) legend.textContent = !isClassify() && !goalSplit()
+    let legend = showBg ? (!isClassify() && !goalSplit()
       ? 'Background colour: the class whose target point the rest of the network sends each spot nearest to, in that class\'s colour — brighter the clearer its lead over the next-nearest point; dark = halfway between two points.'
-      : 'Background colour: the class whose logit wins at each spot, brighter the bigger its lead over the runner-up; dark = undecided. Full colour at a lead of 4.';
+      : 'Background colour: the class whose logit wins at each spot, brighter the bigger its lead over the runner-up; dark = undecided. Full colour at a lead of 4.') : '';
     const bgStage = Math.round(tt), bgBasis = showBg && traces.bases[bgStage];
     if (bgBasis && !bgBasis.exact) {
       const ag = bgCache && bgCache.agree !== null ? ` Here it agrees with the network on ${(100 * bgCache.agree).toFixed(0)}% of the data points${
         bgCache.agree < 0.95 ? ': the rest are separated along directions the slice does not show (tilt the view)' : ''}.` : '';
-      legend.textContent = `At this stage (ℝ${bgBasis.basis[0].length}) the colour is how the rest of the network classifies the PCA plane `
-        + `through the points — a 2D slice.${ag} ` + legend.textContent;
-    } else if (showBg && bgStage > 0) legend.textContent = 'How the rest of the network classifies each spot of this stage. ' + legend.textContent;
+      legend = `At this stage (ℝ${bgBasis.basis[0].length}) the colour is how the rest of the network classifies the PCA plane `
+        + `through the points — a 2D slice.${ag} ` + legend;
+    } else if (showBg && bgStage > 0) legend = 'How the rest of the network classifies each spot of this stage. ' + legend;
+    setInfo('colours', legend || null);
     for (const d of traces.ds) {
       if (d.role === 'jac' || d.role === 'probe' || d.role === 'pins' || d.role === 'interf') continue;
       const p = posCache.get(d);
@@ -868,24 +867,46 @@
     return a.length <= 4 ? `(${a.map(f).join(', ')})` : `(${a.slice(0, 3).map(f).join(', ')}, … +${a.length - 3})`;   // hover shows all
   }
   let basisKey = '';
-  /**
-   * The see-through info panels on the view (stage, basis box, background legend): a click on the title
-   * folds the details away.  Remembered in this browser; on a phone-sized screen they start folded.
+  /*
+   * The Info box (top left): ⓘ Info opens it.  Inside, in a fixed place, the stage and where o and the
+   * basis vectors go; below them the notes (what the colours mean, how a wide layer is shown, messages),
+   * newest first.  A new note makes the closed box blink.  Open / closed is remembered in this browser.
    */
+  const infoFeed = [];            // [{ kind, text }], newest first
+  const infoSeen = new Set();
+  const INFO_KINDS = { colours: 'Background colours', view: 'This view', note: 'Note' };
   function setupFolds() {
-    const narrow = window.matchMedia && window.matchMedia('(max-width: 820px)').matches;
-    for (const [name, id] of [['stage', 'stageLabel'], ['basis', 'basisBox'], ['legend', 'legend']]) {
-      const saved = load(`nsd.fold.${name}`);
-      $(id).classList.add('fold');
-      $(id).classList.toggle('closed', saved === null ? narrow : saved === '1');
-    }
-    // pointerdown, not click: the stage title is redrawn while the view animates
-    document.addEventListener('pointerdown', (e) => {
+    $('infoBox').classList.toggle('closed', load('nsd.fold.info') !== '0');
+    document.addEventListener('click', (e) => {
       const h = e.target.closest('.fold-head[data-fold]');
-      if (!h || e.button !== 0) return;
-      const closed = h.closest('.fold').classList.toggle('closed');
+      if (!h) return;
+      const box = h.closest('.fold'), closed = box.classList.toggle('closed');
+      if (!closed) box.classList.remove('ping');
       store(`nsd.fold.${h.dataset.fold}`, closed ? '1' : '0');
     });
+  }
+
+  /** Set (or with text = null remove) the note of a kind.  New notes go on top; fresh = a new message even if a note of that kind is there. */
+  function setInfo(kind, text, fresh = false) {
+    const i = infoFeed.findIndex((x) => x.kind === kind);
+    if (!text) { if (i >= 0) { infoFeed.splice(i, 1); renderInfoFeed(); } return; }
+    if (i >= 0 && !fresh) {                       // the same note, updated (e.g. per stage): in place, no blink
+      if (infoFeed[i].text !== text) { infoFeed[i].text = text; renderInfoFeed(); }
+      return;
+    }
+    if (i >= 0) infoFeed.splice(i, 1);
+    infoFeed.unshift({ kind, text });
+    renderInfoFeed();
+    // blink for messages, and the first time a kind of note shows up (not every time a stage brings it back)
+    if (fresh || !infoSeen.has(kind)) {
+      infoSeen.add(kind);
+      const box = $('infoBox');
+      if (box.classList.contains('closed')) { box.classList.remove('ping'); void box.offsetWidth; box.classList.add('ping'); }
+    }
+  }
+
+  function renderInfoFeed() {
+    $('infoFeed').innerHTML = infoFeed.map((x) => `<div class="info-item"><span class="k">${INFO_KINDS[x.kind]}</span>${escHtml(x.text)}</div>`).join('');
   }
 
   function renderBasisBox() {
@@ -910,7 +931,7 @@
       cols = [2 * l - 2, 2 * l - 1, 2 * l]; now = s % 2 === 1 ? 1 : 2;
     }
     const title = s === 0 ? 'Origin and basis vectors before the network' : `Layer ${Math.ceil(s / 2)}: where o and the basis vectors go (real coordinates)`;
-    box.innerHTML = `<button class="fold-head bx-title" data-fold="basis" data-tip="Show / hide the coordinates"><span class="caret"></span>${title}</button><table class="fold-body"><tr><th></th>${head.map((h, j) => `<th class="${j === now ? 'now' : ''}">${h}</th>`).join('')}</tr>${
+    box.innerHTML = `<div class="bx-title">${title}</div><table><tr><th></th>${head.map((h, j) => `<th class="${j === now ? 'now' : ''}">${h}</th>`).join('')}</tr>${
       st.map((row, i) => `<tr><td class="k" style="color:${colors[i]}">${names[i]}</td>${cols.map((c, j) => `<td class="${j === now ? 'now' : ''}" title="${Array.from(row[c]).map((x) => x.toFixed(4)).join(', ')}">${fmtVec(row[c])}</td>`).join('')}</tr>`).join('')}</table>`;
   }
 
@@ -1047,9 +1068,9 @@
         D3 ? `, ${pct(D3.explained)}% with depth — right-drag to tilt` : ''}`);
     }
     if (tilted()) lines.push('tilted view · double-click or ⟲ Flat to look straight down');
-    const html = `<button class="fold-head" data-fold="stage" data-tip="Show / hide the details"><span class="caret"></span><b>${title}</b></button>`
-      + `<div class="fold-body">${lines.map((l) => `<span class="tag">${l}</span>`).join('<br>')}</div>`;
-    if ($('stageLabel').innerHTML !== html) $('stageLabel').innerHTML = html;   // unchanged: keep the button under the pointer
+    const html = `<b>${title}</b><br><span class="tag">${lines[0]}</span>`;
+    if ($('stageLabel').innerHTML !== html) $('stageLabel').innerHTML = html;
+    setInfo('view', lines.slice(1).join(' · ') || null);
     renderGizmo(depthInfo[Math.min(n - 1, Math.max(0, s))], P && !P.exact);
   }
 
@@ -1328,12 +1349,9 @@
     flashHint('Auto-fit turned off so your zoom stays. Turn it back on under Display → Auto-fit view.');
   }
 
-  let hintTimer = null;
+  /** A message for the user: a new note on top of the Info box (which blinks while closed). */
   function flashHint(text) {
-    $('hint').textContent = text;
-    $('hint').style.color = '#e3b341';
-    clearTimeout(hintTimer);
-    hintTimer = setTimeout(() => { $('hint').style.color = ''; renderToolbar(); }, 4500);
+    setInfo('note', text, true);
   }
 
   /** 3D: a goal's target point A under the pointer (output step only), or null. */
@@ -2473,7 +2491,10 @@
 
   function setupTooltips() {
     const tip = $('tip');
+    let touchAt = -1e9;
+    document.addEventListener('pointerdown', (e) => { if (e.pointerType !== 'mouse') { touchAt = performance.now(); tip.classList.add('hidden'); } }, true);
     document.addEventListener('mouseover', (e) => {
+      if (performance.now() - touchAt < 1000) return;            // the mouse events a tap fakes afterwards
       const el = e.target.closest('[data-tip]');
       if (!el) { tip.classList.add('hidden'); return; }
       tip.textContent = el.dataset.tip;
@@ -2835,6 +2856,7 @@
   function onResize() {
     viz2.resize();
     if (viz3) viz3.resize();
+    lastSig = '';                 // resizing clears the WebGL canvas: draw again
     analysisDirty = true;
     inspect.key = '';
   }
@@ -2853,6 +2875,7 @@
     syncControls();
     viz2.resize();
     viz2.scale = Math.min(viz2.w, viz2.h) / 6;
+    setDim(3);                    // the page opens in 3D (3 spiral arms); the 2D / 3D switch changes it
     window.addEventListener('resize', onResize);
     if (window.ResizeObserver) new ResizeObserver(onResize).observe($('view'));
     requestAnimationFrame(frame);

@@ -45,14 +45,18 @@ class Browser:
     def js(self, code):
         return self._req('POST', f'/session/{self.sid}/execute/sync', {'script': code, 'args': []})
 
-    def open(self, query='#workspace'):
-        """A real reload every time (a new query string), with an error trap installed."""
+    def open(self, query='#workspace', dim=2):
+        """A real reload every time (a new query string), with an error trap installed.  The page opens in 3D;
+        most checks drive the 2D view, so they switch to it (dim=3 keeps the page as it opened)."""
         self.n += 1
         self._req('POST', f'/session/{self.sid}/url', {'url': 'about:blank'})
         q = f'?t={self.n}' + (query if query.startswith('#') else '&' + query)
         self._req('POST', f'/session/{self.sid}/url', {'url': self.page + q})
         time.sleep(1.4)
         self.js("window.__errs=[];window.addEventListener('error',e=>window.__errs.push(e.message+' @'+e.lineno))")
+        if dim == 2:
+            self.js('__app.setDim(2)')
+            time.sleep(0.4)
 
     def click(self, sel):
         self.js(f"document.querySelector({json.dumps(sel)}).dispatchEvent(new MouseEvent('click',{{bubbles:true}}))")
@@ -79,6 +83,13 @@ class Browser:
 
     def errors(self):
         return self.js('return window.__errs || []')
+
+    def reset(self, width, height):
+        """A clean start for the next check in the same browser: window size, and nothing stored by the page."""
+        self._req('POST', f'/session/{self.sid}/window/rect', {'width': width, 'height': height})
+        self._req('POST', f'/session/{self.sid}/url', {'url': self.page})
+        self.js('localStorage.clear(); sessionStorage.clear()')
+        self._req('POST', f'/session/{self.sid}/url', {'url': 'about:blank'})
 
     def close(self):
         self._req('DELETE', f'/session/{self.sid}')
@@ -196,9 +207,10 @@ def check_goals(b):
 
 
 def check_default_task_and_classes(b):
-    b.open()
-    st = b.js("const S=__app.S; return [S.train.target, S.train.dataset, S.train.nClasses, S.objects.length, S.train.goals.length]")
-    assert st == ['goals', 'spirals', 3, 0, 3], st
+    b.open(dim=3)
+    st = b.js("const S=__app.S; return [S.dim, S.train.target, S.train.dataset, S.train.nClasses, S.objects.length, S.train.goals.length]")
+    assert st == [3, 'goals', 'spirals', 3, 0, 3], st
+    b.js('__app.setDim(2)'); time.sleep(0.4)
     b.train(5)
     assert b.js('return __app.trainer.step_') > 100       # ▶ Train does something on a fresh page
     b.click('#drawerBtn'); time.sleep(0.2)
@@ -212,6 +224,19 @@ def check_default_task_and_classes(b):
     assert b.js('return __app.S.train.goals.length') == 2
     b.set('dataset', 'spirals', 'change'); b.set('target', 'classify', 'change'); time.sleep(0.3)
     assert b.js("return [document.getElementById('nClasses').disabled, new Set(__app.trainer.tasks[0].map(q=>q.y)).size]") == [True, 2]
+
+
+def check_info_box(b):
+    b.open()
+    st = "const x=document.getElementById('infoBox');return [x.classList.contains('closed'),x.classList.contains('ping')]"
+    assert b.js(st)[0], 'the Info box starts closed'
+    b.js("__app.applyGuided({dim:2,problem:'none',network:{layers:3,width:2,act:'tanh',outputLinear:false}})"); time.sleep(0.5)
+    assert b.js(st) == [True, True], 'a new message makes the closed box blink'
+    b.click('#infoBox .fold-head'); time.sleep(0.2)
+    assert b.js(st) == [False, False]
+    assert 'Press' in b.js("return document.getElementById('infoFeed').textContent")
+    b.click('#infoBox .fold-head'); time.sleep(0.2)
+    assert b.js(st)[0]
 
 
 def check_pins_goal(b):
@@ -296,7 +321,7 @@ def check_narrow_screen(b):
     assert r[0] <= r[1] + 1 and r[2] <= r[3], r
 
 
-CHECKS = [check_guided_start, check_guided_goals_and_tour, check_shell_panels, check_strip, check_objects, check_goals, check_default_task_and_classes,
+CHECKS = [check_guided_start, check_guided_goals_and_tour, check_shell_panels, check_strip, check_objects, check_goals, check_default_task_and_classes, check_info_box,
           check_pins_goal, check_timeline, check_view_background_and_tilt, check_dimension_switch, check_basis_box_and_inspector]
 
 
@@ -315,8 +340,11 @@ def main():
     try:
         todo = [c for c in CHECKS if not words or any(w in c.__name__ for w in words)]
         narrow = not words or any(w in 'check_narrow_screen' for w in words)
+        # one browser for all checks: starting a new Firefox per check sometimes hung (geckodriver waited for
+        # the previous one to quit); each check still starts clean (reset) and reloads the page (open)
+        b = Browser(drv, page)
         for check in todo + ([check_narrow_screen] if narrow else []):
-            b = Browser(drv, page, *((500, 760) if check is check_narrow_screen else (1400, 900)))
+            b.reset(*((500, 760) if check is check_narrow_screen else (1400, 900)))
             t0 = time.time()
             try:
                 check(b)
@@ -331,8 +359,7 @@ def main():
                 except Exception:                      # noqa: BLE001
                     shot = '(no screenshot)'
                 print(f'FAIL  {check.__name__[6:]}: {e!r}\n      screenshot: {shot}')
-            finally:
-                b.close()
+        b.close()
     finally:
         driver.terminate(); server.terminate()
     print('all browser checks passed' if not failed else f'{failed} check(s) failed')

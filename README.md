@@ -43,10 +43,12 @@ One big view; everything else opens on demand, and one panel at a time (✕, Esc
 - **＋ Objects** (bottom left): ready-made shapes, drawing by hand, and a card per object (colour, size,
   position, number of points). **ⓘ How it changes** logs what every layer does to the object: length,
   stretch, signed area (mirrored when negative) and self-crossings.
-- **Basis vectors box** (top left, under the stage name): where the origin and e₁, e₂ (e₃) are before the
+- **ⓘ Info** (top left, closed until you tap it; it blinks when something new arrives): the current stage,
+  and in a fixed place under it where the origin and e₁, e₂ (e₃) are before the
   current layer, after its linear step and after its activation — in the layer's real coordinates, also
   when the view shows a wide layer through PCA. **Model ▲ → Show the weight matrices** lists every `W` and
-  `b` as numbers (gold +, violet −), live while training.
+  `b` as numbers (gold +, violet −), live while training. Below them, newest first: notes such as what the
+  background colours mean and messages from the app.
 - **View ▾** (top right): overlays, the class background (at every stage: how the rest of the network
   classifies each spot), and for 2D a third principal direction of wide layers as depth — right-drag to
   tilt the view and see how a wide layer lifts points over each other.
@@ -57,8 +59,8 @@ One big view; everything else opens on demand, and one panel at a time (✕, Esc
 
 ## Things to try
 
-0. **Train right away.** The workspace opens on a task: three interleaved spiral arms, each class sent to
-   its own point on the unit circle. Press **▶ Train** (or T) and watch the arms untwist. In **Model ▲** →
+0. **Train right away.** The workspace opens in 3D on a task: three interleaved spiral arms, each class sent
+   to its own corner of a triangle on the unit sphere (2D: points on the unit circle). Press **▶ Train** (or T) and watch the arms untwist. In **Model ▲** →
    Goal, *Classes* sets 2–4 classes (blue, red, green, orange) for the spirals, blobs, rings of a disk,
    checkerboard and wavy bands, and *Points* the number of samples.
 1. **Watch a network bend space.** Press ▶ at the left of the strip (or Space): the grid, the unit circle
