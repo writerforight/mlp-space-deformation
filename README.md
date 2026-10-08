@@ -15,6 +15,13 @@ Adam, Jacobians, PCA, the neural tangent kernel and the continual-learning metho
 first principles in plain JavaScript (`src/nn.js`, with comments). Three.js (loaded from a CDN) is used
 only to draw the 3D view.
 
+## Opening scene
+
+A first visit opens on a short scene (`src/intro.js`): a real network — six layers, three neurons wide, so
+every step is honest 3D — is trained in the page in a few seconds and then untwists three spiral arms,
+layer by layer, until each class sits in its own corner. A tap skips it; **Try it yourself** goes to the
+workspace, **Guided tour** to the guided start. A link ending in `#workspace` skips both.
+
 ## Guided start
 
 The page opens with a short guided start: pick **2D or 3D**, then a **problem** (classification, copy a

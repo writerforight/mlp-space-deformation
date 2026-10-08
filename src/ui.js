@@ -314,7 +314,9 @@
       invertibleFloor: S.net.homeo ? HOMEO_FLOOR : 0 };
   }
 
+  let doneChimed = false;        // the "goal reached" sound plays once per training run
   function rebuildTrainer() {
+    doneChimed = false;
     buildData();
     trainer = new NN.Trainer(net, trainerOpts());
     trainer.setTasks(buildTasks());
@@ -867,6 +869,24 @@
     return a.length <= 4 ? `(${a.map(f).join(', ')})` : `(${a.slice(0, 3).map(f).join(', ')}, … +${a.length - 3})`;   // hover shows all
   }
   let basisKey = '';
+  /** Sound (src/sound.js): starts with the first touch; buttons click; 🔊 turns it on / off. */
+  function setupSound() {
+    document.addEventListener('pointerdown', () => Sound.unlock(), true);
+    document.addEventListener('click', (e) => {
+      const b = e.target.closest('button, .ochip, summary');
+      if (!b || b.id === 'trainPlay' || b.closest('.pipe') || b.closest('#intro')) return;   // these make their own sounds
+      Sound.click();
+    });
+    const show = (on) => {
+      $('soundBtn').textContent = on ? '🔊' : '🔇';
+      $('soundMore').textContent = `Sound: ${on ? 'on' : 'off'}`;
+    };
+    $('soundBtn').onclick = () => { Sound.on = !Sound.on; };
+    $('soundMore').onclick = () => { Sound.on = !Sound.on; };
+    Sound.onChange(show);
+    show(Sound.on);
+  }
+
   /*
    * The Info box (top left): ⓘ Info opens it.  Inside, in a fixed place, the stage and where o and the
    * basis vectors go; below them the notes (what the colours mean, how a wide layer is shown, messages),
@@ -1445,6 +1465,7 @@
     const parts = [`step ${T.step_}`];
     if (T.lossHistory.length) parts.push(`loss ${fmt(T.lossHistory[T.lossHistory.length - 1])}`);
     const acc = accuracy();
+    if (acc !== null && acc >= 0.99 && training && !doneChimed) { doneChimed = true; Sound.done(); }   // reached the goal
     if (acc !== null && T.step_ > 0) parts.push(`accuracy ${(100 * acc).toFixed(1)}% (${isAnchors() ? 'nearest target point' : isGoals() && !goalSplit() ? 'nearer class point' : 'larger logit'})`);
     if (T.step_ > 0 && (isAnchors() || isMorph())) {
       const wt = worstOn(data), wd = denseData() ? worstDense() : null;
@@ -1746,6 +1767,7 @@
       if (!training) branchFromView();
       if (!training && trainer.done) rebuildTrainerKeepWeights();
       training = !training; updateTrainStatus();
+      if (training) Sound.train(); else Sound.click();
     };
     $('toolChip').onclick = () => setTool('pan');
     $('trainStep').onclick = () => { training = false; branchFromView(); trainSteps(1); invalidate(); netVersion++; };
@@ -2535,10 +2557,16 @@
       cam.yaw, cam.pitch, tool, drawing ? 1 : 0, S.dim].join('|');
   }
 
-  let gizmoKey = '';
+  let gizmoKey = '', soundT = 0;
   function frame(now) {
     requestAnimationFrame(frame);           // first: an error below must never stop the loop (the view would go black)
     advanceAnimation(now);
+    // a soft bell each time the view passes the end of a layer (playing, stepping or scrubbing; not on a jump)
+    if (t !== soundT) {
+      const lo = Math.min(t, soundT), hi = Math.max(t, soundT), s = 2 * Math.floor(hi / 2 + 1e-9);
+      if (hi - lo < 2.5 && s >= 2 && s > lo + 1e-9) Sound.layer(s / 2 - 1);
+      soundT = t;
+    }
     if (training) trainSteps(S.train.stepsPerFrame);
     if (!document.body.classList.contains('wizard-open')) {
       const sig = viewSig();
@@ -2875,6 +2903,7 @@
     setupTooltips();
     setupInspector();
     setupFolds();
+    setupSound();
     setupShortcuts();
     setupHelp();
     bind2DMouse();

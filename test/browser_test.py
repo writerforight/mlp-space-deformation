@@ -127,6 +127,41 @@ def check_skip_guide_draws_3d(b):
     assert st == [False, False, True], st          # the view was drawn: the stage is named, the axes show
 
 
+def check_intro(b):
+    """The opening scene plays on a first visit; its buttons lead to the workspace or to the guided start."""
+    b.open('', dim=3)
+    assert b.js("return !!document.getElementById('intro')")
+    b.click('#intro .intro-skip'); time.sleep(0.3)
+    assert b.js("return document.getElementById('intro').classList.contains('ended')")
+    b.click('#introTry'); time.sleep(1.5)
+    st = b.js("return [!!document.getElementById('intro'), document.body.classList.contains('wizard-open'), "
+              "document.getElementById('gizmo').classList.contains('hidden')]")
+    assert st == [False, False, False], st          # gone, guide skipped, the workspace drawn
+    b.open('', dim=3)
+    b.click('#introGuide'); time.sleep(1.2)
+    st = b.js("return [!!document.getElementById('intro'), document.body.classList.contains('wizard-open'), "
+              "document.querySelector('.wz-screen.active').dataset.step]")
+    assert st == [False, True, 'dimension'], st
+    b.open('#workspace')
+    assert not b.js("return !!document.getElementById('intro')"), 'no opening scene at #workspace'
+
+
+def check_sound(b):
+    """🔊 turns the sound on and off (remembered); every sound call runs without errors."""
+    b.open('#workspace')
+    assert b.js('return Sound.on') is True and b.js("return document.getElementById('soundBtn').textContent") == '🔊'
+    b.click('#soundBtn'); time.sleep(0.2)
+    assert b.js("return [Sound.on, document.getElementById('soundBtn').textContent, localStorage.getItem('nsd.sound')]") == [False, '🔇', '0']
+    b.click('#soundBtn'); time.sleep(0.2)
+    b.js('Sound.unlock(); Sound.click(); Sound.layer(2); Sound.train(); Sound.done(); Sound.resolve(); '
+         'Sound.droneStart(); Sound.droneOpen(0.5); Sound.droneStop(0.1)')
+    b.click('#trainPlay'); time.sleep(1); b.click('#trainPlay')
+    b.open('', dim=3)
+    b.click('#intro .intro-sound'); time.sleep(0.3)
+    b.click('#intro .intro-skip'); time.sleep(1.0)
+    assert b.js("return document.getElementById('intro').classList.contains('ended')")
+
+
 def check_guided_goals_and_tour(b):
     b.open('')
     b.js('localStorage.clear()')
@@ -363,7 +398,7 @@ def check_narrow_screen(b):
     assert r[0] <= r[1] + 1 and r[2] <= r[3], r
 
 
-CHECKS = [check_guided_start, check_skip_guide_draws_3d, check_guided_goals_and_tour, check_shell_panels, check_strip, check_objects, check_goals, check_default_task_and_classes, check_info_box, check_touch_gestures,
+CHECKS = [check_guided_start, check_skip_guide_draws_3d, check_intro, check_sound, check_guided_goals_and_tour, check_shell_panels, check_strip, check_objects, check_goals, check_default_task_and_classes, check_info_box, check_touch_gestures,
           check_pins_goal, check_timeline, check_view_background_and_tilt, check_dimension_switch, check_basis_box_and_inspector]
 
 
