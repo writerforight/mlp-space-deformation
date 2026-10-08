@@ -2537,6 +2537,7 @@
 
   let gizmoKey = '';
   function frame(now) {
+    requestAnimationFrame(frame);           // first: an error below must never stop the loop (the view would go black)
     advanceAnimation(now);
     if (training) trainSteps(S.train.stepsPerFrame);
     if (!document.body.classList.contains('wizard-open')) {
@@ -2548,7 +2549,7 @@
     }
     if (now - lastLossDraw > 120 && training) { if (isOpen('loss')) drawLoss(); lastLossDraw = now; }
     if (now - lastInspector > (training ? 120 : 60)) { lastInspector = now; try { renderInspectorAndNet(); } catch (err) { console.error(err); } }
-    if (S.dim === 3 && viz3) {
+    if (S.dim === 3 && viz3 && traces) {    // traces: nothing drawn yet (e.g. behind the guided start)
       const o = viz3.orbit, key = `${o.theta.toFixed(3)}|${o.phi.toFixed(3)}|${lastSig}`;
       if (key !== gizmoKey) { gizmoKey = key; renderStageUI(); }
     }
@@ -2560,7 +2561,6 @@
       analysisDirty = false; lastAnalysis = now;
       try { updateAnalysis(); } catch (err) { console.error(err); }
     }
-    requestAnimationFrame(frame);
   }
 
   // ===========================================================================

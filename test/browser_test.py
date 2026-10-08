@@ -117,6 +117,16 @@ def check_guided_start(b):
     assert l1 < l0 * 0.05, (l0, l1)
 
 
+def check_skip_guide_draws_3d(b):
+    """A first visit sees the guided start; leaving it must show the 3D view (it once stayed black)."""
+    b.open('', dim=3)
+    assert b.js("return document.body.classList.contains('wizard-open')")
+    b.click('#wzSkip'); time.sleep(1.5)
+    st = b.js("return [document.body.classList.contains('wizard-open'), document.getElementById('gizmo').classList.contains('hidden'), "
+              "document.getElementById('stageLabel').textContent.length > 0]")
+    assert st == [False, False, True], st          # the view was drawn: the stage is named, the axes show
+
+
 def check_guided_goals_and_tour(b):
     b.open('')
     b.js('localStorage.clear()')
@@ -255,6 +265,16 @@ def check_touch_gestures(b):
       const E=(t,x)=>el.dispatchEvent(new PointerEvent(t,{bubbles:true,pointerId:21,pointerType:'touch',clientX:x,clientY:cy,button:0,buttons:1}));
       E('pointerdown',cx); E('pointermove',cx+60); E('pointerup',cx+60);"""); time.sleep(0.2)
     assert b.js('return __app.viz3.orbit.theta') != o1[1], 'one finger rotates'
+    # a pinch whose fingers lift outside the view must not leave it stuck: one finger turns it again
+    b.js("""const el=document.querySelector('#c3d canvas'), r=el.getBoundingClientRect(), cx=r.left+r.width/2, cy=r.top+r.height/2;
+      const E=(t,id,x,on)=>(on||el).dispatchEvent(new PointerEvent(t,{bubbles:true,pointerId:id,pointerType:'touch',isPrimary:id===31,clientX:x,clientY:cy,button:0,buttons:1}));
+      E('pointerdown',31,cx-30); E('pointerdown',32,cx+30); E('pointermove',32,cx+60);
+      E('pointerup',31,cx-30,document.body); E('pointerup',32,cx+60,document.body);""")
+    t1 = b.js('return __app.viz3.orbit.theta')
+    b.js("""const el=document.querySelector('#c3d canvas'), r=el.getBoundingClientRect(), cx=r.left+r.width/2, cy=r.top+r.height/2;
+      const E=(t,x)=>el.dispatchEvent(new PointerEvent(t,{bubbles:true,pointerId:41,pointerType:'touch',isPrimary:true,clientX:x,clientY:cy,button:0,buttons:1}));
+      E('pointerdown',cx); E('pointermove',cx+60); E('pointerup',cx+60);"""); time.sleep(0.2)
+    assert b.js('return __app.viz3.orbit.theta') != t1, 'not stuck after fingers lifted outside'
     b.js('__app.setDim(2)'); time.sleep(0.4)
     s0 = b.js('return __app.viz2.scale')
     b.js(pinch.format(el="document.getElementById('c2d')")); time.sleep(0.3)
@@ -343,7 +363,7 @@ def check_narrow_screen(b):
     assert r[0] <= r[1] + 1 and r[2] <= r[3], r
 
 
-CHECKS = [check_guided_start, check_guided_goals_and_tour, check_shell_panels, check_strip, check_objects, check_goals, check_default_task_and_classes, check_info_box, check_touch_gestures,
+CHECKS = [check_guided_start, check_skip_guide_draws_3d, check_guided_goals_and_tour, check_shell_panels, check_strip, check_objects, check_goals, check_default_task_and_classes, check_info_box, check_touch_gestures,
           check_pins_goal, check_timeline, check_view_background_and_tilt, check_dimension_switch, check_basis_box_and_inspector]
 
 

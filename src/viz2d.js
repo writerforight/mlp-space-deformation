@@ -341,6 +341,9 @@
     };
     el.addEventListener('pointerdown', (e) => {
       if (e.pointerType !== 'touch') return;
+      // the first finger of a new touch: forget everything (a lifted finger whose pointerup went astray
+      // must never leave the view stuck in "two fingers")
+      if (e.isPrimary) { pts.clear(); active = false; }
       pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (pts.size === 2) { active = true; prev = geo(); onStart(); }
       if (active) e.stopImmediatePropagation();
@@ -363,6 +366,10 @@
     };
     el.addEventListener('pointerup', end);
     el.addEventListener('pointercancel', end);
+    // a finger lifted outside the element: its pointerup lands elsewhere
+    const away = (e) => { if (e.target !== el && pts.delete(e.pointerId) && pts.size === 0) active = false; };
+    window.addEventListener('pointerup', away, true);
+    window.addEventListener('pointercancel', away, true);
   }
 
   root.Viz2D = Viz2D;
