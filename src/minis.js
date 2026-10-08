@@ -14,7 +14,7 @@
   'use strict';
   const NN = root.NN || (typeof require !== 'undefined' ? require('./nn.js') : null);
 
-  const CLASS = ['#58a6ff', '#ff6b6b'];        // the two classes (blue / red are reserved for them)
+  const CLASS = ['#58a6ff', '#ff6b6b', '#56d364', '#ffa94d'];   // classes 1–4: blue, red, green, orange (reserved for them)
   const GRID = '#8b949e';
   const OBJ = '#e3b341';                       // a shape that is not a class
   const TARGET = '#e6edf3';
@@ -186,13 +186,13 @@
   // ---- data previews (no network): the data set itself, or the target map / shape pair ---------------
   /** Data sets offered on the data step, per problem.  `noise`: the generator uses the noise setting. */
   const DATASETS = [
-    { id: 'blobs', name: 'Two blobs', group: 'Easy', dims: [2, 3], blurb: 'Two separate clouds. A straight line already splits them.' },
+    { id: 'blobs', name: 'Two blobs', group: 'Easy', dims: [2, 3], blurb: 'Separate clouds, one per class (2–4). Straight lines already split them.' },
     { id: 'moons', name: 'Two moons', group: 'Easy', dims: [2, 3], noise: true, blurb: 'Two interleaving half-moons. One bend is enough.' },
     { id: 'circles', name: 'Disk in a ring', group: 'Easy', dims: [2, 3], noise: true, blurb: 'A disk inside a ring (3D: a ball inside a shell). No line separates them; the network has to squash space or use an extra dimension.' },
     { id: 'xor', name: 'XOR', group: 'Harder', dims: [2, 3], blurb: 'Opposite quadrants share a colour. No single line works: the network must fold space.' },
     { id: 'wave', name: 'Wavy boundary', group: 'Harder', dims: [2, 3], blurb: 'A smooth but curved boundary.' },
     { id: 'rings', name: 'Three rings', group: 'Harder', dims: [2, 3], noise: true, blurb: 'Blue, red, blue rings. Separating the middle ring takes two folds.' },
-    { id: 'spirals', name: 'Spirals', group: 'Hard', dims: [2, 3], noise: true, blurb: 'Two interleaved spirals. Many folds are needed: use more layers or width.' },
+    { id: 'spirals', name: 'Spirals', group: 'Hard', dims: [2, 3], noise: true, blurb: 'Interleaved spiral arms, one per class (2–4). Many folds are needed: use more layers or width.' },
     { id: 'checker', name: 'Checkerboard', group: 'Hard', dims: [2, 3], blurb: 'Many small regions: a test of capacity (width x depth).' },
     { id: 'linked', name: 'Linked rings', group: 'Hard', dims: [3], noise: true, blurb: 'Two linked rings. No smooth invertible deformation of space can unlink them; width 4 or more separates them.' },
     { id: 'shape:diskInRing', name: 'Exact disk in a ring', group: 'Exact shapes', dims: [2], exact: true, blurb: 'The disk and ring without noise. A homeomorphism of the plane cannot move the disk out.' },
@@ -220,7 +220,7 @@
   };
 
   /**
-   * opts: classify { dataset, n, noise, seed (0, 1, 2, … = sample number) } | transform { map, amount } | morph { pair: 'a>b' }
+   * opts: classify { dataset, n, noise, seed (0, 1, 2, … = sample number), k (classes) } | transform { map, amount } | morph { pair: 'a>b' }
    * The classify scene stands still (from = to); transform and morph animate identity -> target.
    */
   function dataScene(problem, dim, opts) {
@@ -232,10 +232,10 @@
       } else {
         // same random stream as the workspace's buildData() with its default weight seed 2 (2·101 + 5 = 207),
         // so the sample shown here is the sample the workspace trains on; `seed` counts "new random sample" clicks
-        samples = NN.makeDataset(ds, opts.n || 400, dim, new NN.Rng(207 + 7919 * (opts.seed || 0)), opts.noise ?? 0.08);
+        samples = NN.makeDataset(ds, opts.n || 400, dim, new NN.Rng(207 + 7919 * (opts.seed || 0)), opts.noise ?? 0.08, opts.k || 2);
       }
       return {
-        items: [0, 1].map((c) => {
+        items: CLASS.map((_, c) => c).filter((c) => samples.some((q) => q.y === c)).map((c) => {
           const pts = samples.filter((q) => q.y === c).map((q) => q.x);
           return { kind: 'dots', from: pts, to: pts, color: CLASS[c], alpha: 0.95, size: opts.dotSize || 1.8 };
         }),

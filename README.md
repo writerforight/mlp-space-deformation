@@ -19,9 +19,9 @@ only to draw the 3D view.
 
 The page opens with a short guided start: pick **2D or 3D**, then a **problem** (classification, copy a
 linear map, shape to shape, or just look), then the **data** (each card opens with its settings: number
-of points, noise, map strength), then the **network**, drawn as its actual weight matrices with the
+of points up to 2000, number of classes (2–4 where the data has them), noise, map strength), then the **network**, drawn as its actual weight matrices with the
 starting weights. Every card plays a small preview computed by a tiny network trained in the page.
-The problems include **Send classes anywhere** (blue to a point A, red to a point B, both draggable later).
+The problems include **Send classes anywhere**: each class goes to its own point, spread evenly on the unit circle (3D: a line, a triangle or a tetrahedron on the unit sphere), all draggable later.
 *Open the workspace* applies all choices (and, if ticked, starts a short **tour** of the workspace — also under **?** → *Take the tour*); **I know how to use it** (or a link ending in `#workspace`)
 goes straight to the full workspace, and **Guided start** in the header opens the guide again.
 Code: `src/wizard.js` (flow) and `src/minis.js` (previews).
@@ -57,11 +57,15 @@ One big view; everything else opens on demand, and one panel at a time (✕, Esc
 
 ## Things to try
 
+0. **Train right away.** The workspace opens on a task: three interleaved spiral arms, each class sent to
+   its own point on the unit circle. Press **▶ Train** (or T) and watch the arms untwist. In **Model ▲** →
+   Goal, *Classes* sets 2–4 classes (blue, red, green, orange) for the spirals, blobs, rings of a disk,
+   checkerboard and wavy bands, and *Points* the number of samples.
 1. **Watch a network bend space.** Press ▶ at the left of the strip (or Space): the grid, the unit circle
-   and the example objects go through each layer — first the linear map, then the activation. Click a
+   and the data (and any objects you add with ＋ Objects) go through each layer — first the linear map, then the activation. Click a
    step in the strip to jump there, or drag along it.
 2. **Look inside a layer.** Click ⓘ next to a layer in the strip. The *Layer inspector* shows its weight
-   matrix `W` and bias `b` as a heatmap (gold +, violet −; blue and red always mean the two classes), its
+   matrix `W` and bias `b` as a heatmap (gold +, violet −; blue, red, green and orange always mean the classes), its
    activation function with the derivative and a histogram of where the points actually land, and how
    every weight moved during training. Double-click a weight, type a new value and watch the
    deformation change.

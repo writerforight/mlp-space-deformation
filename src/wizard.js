@@ -107,7 +107,7 @@
   function dataOptions(problem, dim) {
     if (problem === 'classify' || problem === 'goals') {
       return Minis.DATASETS.filter((d) => d.dims.includes(dim)).map((d) => ({ group: d.group, id: d.id, name: d.name,
-        blurb: d.blurb, info: d, opts: { dataset: d.id, n: 400, noise: 0.08, seed: 0 } }));
+        blurb: d.blurb, info: d, opts: { dataset: d.id, n: 400, noise: 0.08, seed: 0, k: 2 } }));
     }
     if (problem === 'transform') {
       return Minis.MAPS.map((m) => ({ group: 'Linear map', id: m.id, name: m.name, blurb: m.blurb, info: m,
@@ -120,8 +120,8 @@
   }
 
   const TEXT = {
-    classify: ['Which data?', 'Blue and red are the two classes. Open a card to adjust it.'],
-    goals: ['Which data?', 'Blue points will be sent to A, red points to B. Open a card to adjust the data.'],
+    classify: ['Which data?', 'Each colour is a class. Open a card to adjust it, and to choose how many classes.'],
+    goals: ['Which data?', 'Each class will be sent to its own point. Open a card to adjust the data and the number of classes.'],
     transform: ['Which linear map?', 'The network learns to send every point x to A·x. Open a card to set the amount.'],
     morph: ['Which shapes?', 'Point i of the first shape should land on point i of the second.'],
   };
@@ -172,11 +172,15 @@
     $('wzDetBlurb').textContent = o.blurb || '';
     let html = '';
     if (problem === 'classify' || problem === 'goals') {
-      html += slider('wzN', 'Points', 100, 800, 50, detail.opts.n, (v) => v, 'How many points the network trains on.');
+      html += slider('wzN', 'Points', 100, 2000, 50, detail.opts.n, (v) => v, 'How many points the network trains on.');
+      // more classes where the data has them (logits need one output per class, so classification stops at the dimension)
+      const kMax = o.info.exact ? 2 : Math.min(NN.maxClasses(o.opts.dataset), problem === 'classify' ? dim : 4);
+      detail.opts.k = Math.min(detail.opts.k, kMax);
+      if (kMax > 2) html += slider('wzK', 'Classes', 2, kMax, 1, detail.opts.k, (v) => v, 'How many classes: blue, red, green, orange.');
       if (o.info.noise) html += slider('wzNoise', 'Noise', 0, 0.3, 0.01, detail.opts.noise, (v) => (+v).toFixed(2), 'How far points scatter from the clean shape.');
       else if (o.info.exact) html += '<div class="note">Exact shape: no noise, the points lie exactly on it.</div>';
       if (!o.info.exact) html += '<div class="btns"><button id="wzResample">New random sample</button></div>';
-      if (problem === 'goals') html += '<div class="note">A starts at (1, 0) and B at (−1, 0). In the workspace, go to Output and drag them — or add more goals.</div>';
+      if (problem === 'goals') html += `<div class="note">Each class gets its own target point, spread evenly on the unit ${dim === 2 ? 'circle' : 'sphere'}. In the workspace, go to Output and drag them — or add more goals.</div>`;
     } else if (problem === 'transform') {
       const m = o.info, fmt = (v) => `${(+v).toFixed(2)}${m.unit ? ` ${m.unit}` : ''}`;
       html += slider('wzAmount', m.id === 'rotation' ? 'Angle' : m.id === 'shear' ? 'Shear' : 'Stretch', m.min, m.max, 0.05, detail.opts.amount, fmt);
@@ -190,6 +194,7 @@
       if (el) el.oninput = () => { detail.opts[key] = +el.value; $(`${id}Val`).textContent = fmt(el.value); redrawDetail(); };
     };
     bind('wzN', 'n', (v) => v);
+    bind('wzK', 'k', (v) => v);
     bind('wzNoise', 'noise', (v) => (+v).toFixed(2));
     if (o.info && o.info.unit !== undefined) bind('wzAmount', 'amount', (v) => `${(+v).toFixed(2)}${o.info.unit ? ` ${o.info.unit}` : ''}`);
     if ($('wzResample')) $('wzResample').onclick = () => { detail.opts.seed += 1; redrawDetail(); };

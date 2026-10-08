@@ -13,7 +13,9 @@
   const $ = (id) => document.getElementById(id);
   const ACTS = NN.ACTIVATION_NAMES;
   const PALETTE = ['#58a6ff', '#f78166', '#d2a8ff', '#3fb950', '#ffa657', '#ff7b72', '#79c0ff', '#e3b341'];
-  const CLASS_COLORS = ['#58a6ff', '#ff6b6b'];   // class 1 = blue, class 2 = red
+  const CLASS_COLORS = ['#58a6ff', '#ff6b6b', '#56d364', '#ffa94d'];   // classes 1–4: blue, red, green, orange
+  const CLASS_NAMES = ['blue', 'red', 'green', 'orange'];
+  const CLASS_RGB = CLASS_COLORS.map((h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)));
   const BASIS_COLORS = ['#ff6b6b', '#51cf66', '#4dabf7'];
   const GRID_COLOR = 'rgba(150,160,180,0.35)';
   const STATE_VERSION = 1;
@@ -31,12 +33,13 @@
     return {
       version: STATE_VERSION,
       dim,
-      net: { layers: 3, width: dim, defaultAct: 'tanh', temperature: 0, outputLinear: false, homeo: false,
-        overrides: [], init: { dist: 'he', scale: 1.6, seed: 2 } },
+      // the page opens on a task, so ▶ Train does something right away: spiral arms, each class to its own point
+      net: { layers: 6, width: 6, defaultAct: 'tanh', temperature: 0, outputLinear: true, homeo: false,
+        overrides: [], init: { dist: 'xavier', scale: 1, seed: 2 } },
       objects: [],
       nPoints: 300,
       display: { grid: true, circle: true, basis: true, origin: true, jac: false, det: false, dist: false, autoFit: false, bg: true, lift: true, basisInfo: true, mats: false },
-      train: { target: 'none', goals: [], dataset: 'moons', nData: 400, noise: 0.08, dataSeed: 0, transform: 'rotation', morph: MORPHS[dim][0].join('>'), amount: 0.9, optimizer: 'adam', lr: 0.01, batch: 32, stepsPerFrame: 5,
+      train: { target: 'goals', goals: [], dataset: 'spirals', nClasses: 3, nData: 600, noise: 0.08, dataSeed: 0, transform: 'rotation', morph: MORPHS[dim][0].join('>'), amount: 0.9, optimizer: 'adam', lr: 0.01, batch: 32, stepsPerFrame: 5,
         redrawEvery: 10, mode: 'joint', stepsPerTask: 300, nTasks: 3, method: 'none', lambda: 100 },
       pins: [],
       custom: [],          // painted points for the "paint your own" dataset: [{ x, label }]
@@ -122,26 +125,32 @@
   const usesClasses = () => isClassify() || isAnchors() || isGoals();
   /** "My goals": a goal sends some points somewhere; several goals train together (see buildData). */
   const goalSplit = () => isGoals() && S.train.goals.some((g) => g.kind === 'classSplit');
+  const MAX_CLASSES = CLASS_COLORS.length;
+  /** Most classes the current data can have: what the dataset supports, and one logit (output) per class. */
+  function classCap() {
+    const ds = S.train.dataset;
+    if (ds === 'custom' || ds.startsWith('shape:')) return 2;
+    return Math.min(NN.maxClasses(ds), isClassify() || goalSplit() ? S.dim : MAX_CLASSES);
+  }
+  /** Number of classes in the data: the chosen count, within classCap(). */
+  const nClasses = () => Math.max(2, Math.min(S.train.nClasses || 2, classCap()));
   const classTarget = (c) => { const g = isGoals() && S.train.goals.find((x) => x.kind === 'classPoint' && x.cls === c); return g ? g.target : null; };
   const HOMEO_FLOOR = 0.2;                  // smallest singular value kept in homeomorphism mode
   const morphPair = () => S.train.morph.split('>');
 
-  /** Target point of a class for the "anchors" task: blue → +e1, red → −e1. */
-  function anchor(c) {
-    const v = new Float64Array(S.dim);
-    v[0] = c === 0 ? 1 : -1;
-    return v;
-  }
+  /** Target point of a class for the "anchors" task: the classes spread evenly on the unit circle / sphere. */
+  const anchor = (c) => NN.classTargets(nClasses(), S.dim)[c];
+  /** Where each class should go (null: a goal-mode class without a "Class → point" goal). */
+  const classPoints = () => [...Array(nClasses())].map((_, c) => (isGoals() ? classTarget(c) : anchor(c)));
 
   /** Fraction of samples on the right side: argmax of the logits, or the nearer anchor. */
   function accuracy() {
     if (!usesClasses() || !data.length) return null;
     let ok = 0;
     for (const s of (isGoals() ? goalClassData : data)) {
-      const o = net.predict(s.x);
-      const v = bgValue(o);
-      if (v === null) return null;
-      if ((v > 0 ? 0 : 1) === s.label) ok++;
+      const r = bgClass(net.predict(s.x));
+      if (r === null) return null;
+      if (r.c === s.label) ok++;
     }
     return ok / Math.max(1, (isGoals() ? goalClassData : data).length);
   }
@@ -178,36 +187,55 @@
   }
 
   /**
-   * Signed "which class wins here" for an output o: > 0 blue, < 0 red, null if the task has no such rule.
-   * Logits (classify, or a "split" goal): o₁ − o₂.  Two class points A (blue) and B (red): which one is
-   * nearer, scaled so ±1 means "at that point".  Anchors: the first coordinate.
+   * "Which class wins here" for an output o: { c, v } with the winning class c and its lead v ≥ 0 over the
+   * runner-up, or null if the task has no such rule.  Logits (classify, or a "split" goal): the largest
+   * logit, v = (lead in logits)/4.  Class points: the nearest one, v = (d₂² − d₁²)/‖P₁ − P₂‖², so v = 1 means
+   * "at that point" (with two classes this is the signed position between A and B of before).
    */
-  function bgValue(o) {
-    if (isClassify() || goalSplit()) return (o[0] - o[1]) / 4;
-    if (isAnchors()) return o[0];
-    const A = classTarget(0), B = classTarget(1);
-    if (isGoals() && A && B) {
-      let num = 0, den = 0;
-      for (let k = 0; k < A.length; k++) { const d = A[k] - B[k]; num += (o[k] - (A[k] + B[k]) / 2) * d; den += d * d; }
-      return den ? (2 * num) / den : 0;
+  function bgClass(o) {
+    if (isClassify() || goalSplit()) {
+      const K = nClasses();
+      let a = 0, b = -1;
+      for (let k = 1; k < K; k++) if (o[k] > o[a]) a = k;
+      for (let k = 0; k < K; k++) if (k !== a && (b < 0 || o[k] > o[b])) b = k;
+      return { c: a, v: (o[a] - o[b]) / 4 };
     }
-    return null;
+    if (!isAnchors() && !isGoals()) return null;
+    const P = classPoints();
+    let a = -1, b = -1, da = Infinity, db = Infinity;
+    P.forEach((p, c) => {
+      if (!p) return;
+      let d = 0;
+      for (let k = 0; k < p.length; k++) d += (o[k] - p[k]) ** 2;
+      if (d < da) { b = a; db = da; a = c; da = d; } else if (d < db) { b = c; db = d; }
+    });
+    if (b < 0) return null;
+    let D = 0;
+    for (let k = 0; k < P[a].length; k++) D += (P[a][k] - P[b][k]) ** 2;
+    return { c: a, v: D ? (db - da) / D : 0 };
   }
 
   let goalClassData = [];         // the class points shown in "my goals" mode (each point once)
   let goalNextId = 1;
   const GOAL_KINDS = {
-    classPoint: { name: 'Class → point', formula: (g) => `L = mean ‖f(x) − A‖² over the ${g.cls === 0 ? 'blue' : 'red'} points` },
-    classSplit: { name: 'Separate the classes', formula: () => 'L = mean cross-entropy(softmax f(x), class): blue wins logit₁, red logit₂' },
+    classPoint: { name: 'Class → point', formula: (g) => `L = mean ‖f(x) − A‖² over the ${CLASS_NAMES[g.cls]} points` },
+    classSplit: { name: 'Separate the classes', formula: () => 'L = mean cross-entropy(softmax f(x), class): class k should win logit k' },
     objectPoint: { name: 'Object → point', formula: () => 'L = mean ‖f(x) − A‖² over the object' },
     objectStay: { name: 'Object stays', formula: () => 'L = mean ‖f(x) − x‖² over the object: keep it where it is' },
     pins: { name: 'Pinned points', formula: () => 'L = mean ‖f(xᵢ) − yᵢ‖² over the pins (add them with the Pin tool, ＋ Objects)' },
   };
 
+  /** One "Class → point" goal per class, at points spread evenly on the unit circle / sphere. */
   function defaultGoals() {
-    const z = S.dim === 3 ? [0] : [];
-    return [{ id: goalNextId++, kind: 'classPoint', cls: 0, target: [1, 0, ...z], weight: 1 },
-      { id: goalNextId++, kind: 'classPoint', cls: 1, target: [-1, 0, ...z], weight: 1 }];
+    return NN.classTargets(nClasses(), S.dim).map((p, c) => ({ id: goalNextId++, kind: 'classPoint', cls: c, target: Array.from(p), weight: 1 }));
+  }
+
+  /** The number of classes changed: one class goal per class again, at the default points (other goals stay). */
+  function syncClassGoals() {
+    if (!isGoals()) return;
+    const K = nClasses(), cls = S.train.goals.filter((g) => g.kind === 'classPoint').map((g) => g.cls);
+    if (cls.every((c) => c < K) && [...Array(K).keys()].every((c) => cls.includes(c))) return;   // extra goals for a class may stay
+    S.train.goals = defaultGoals().concat(S.train.goals.filter((g) => g.kind !== 'classPoint'));
   }
 
   /** Every goal becomes samples { x, y, type, w, goal }; w = weight · N / (K · nᵢ), so the batch loss is (1/K) Σ wᵢ Lᵢ. */
@@ -247,14 +275,14 @@
       const ds = S.train.dataset;
       const raw = ds === 'custom' ? S.custom.map((p) => ({ x: Float64Array.from(p.x), y: p.label }))
         : ds.startsWith('shape:') ? NN.makeShape(ds.slice(6)).components.flatMap((c) => c.pts.map((x) => ({ x, y: c.label })))
-        : NN.makeDataset(ds, S.train.nData || 400, S.dim, rng, S.train.noise ?? 0.08);
+        : NN.makeDataset(ds, S.train.nData || 400, S.dim, rng, S.train.noise ?? 0.08, nClasses());
       goalClassData = raw.map((r) => ({ x: r.x, label: r.y }));
       data = goalSamples(raw);
     } else if (usesClasses()) {
       const ds = S.train.dataset;
       const raw = ds === 'custom' ? S.custom.map((p) => ({ x: Float64Array.from(p.x), y: p.label }))
         : ds.startsWith('shape:') ? NN.makeShape(ds.slice(6)).components.flatMap((c) => c.pts.map((x) => ({ x, y: c.label })))
-        : NN.makeDataset(ds, S.train.nData || 400, S.dim, rng, S.train.noise ?? 0.08);
+        : NN.makeDataset(ds, S.train.nData || 400, S.dim, rng, S.train.noise ?? 0.08, nClasses());
       data = raw.map((s) => ({ x: s.x, label: s.y, y: isAnchors() ? anchor(s.y) : s.y }));
     } else if (isTransform()) {
       targetA = NN.targetMatrix(S.train.transform, S.dim, S.train.amount);
@@ -617,16 +645,14 @@
       }
     }
     // class background: how the rest of the network would classify a point sitting here, at every stage
-    const showBg = vd === 2 && usesClasses() && D.bg && !tilted() && bgValue(new Float64Array(vd)) !== null;
+    const showBg = vd === 2 && usesClasses() && D.bg && !tilted() && bgClass(new Float64Array(vd)) !== null;
     if (showBg) items.push(backgroundImage(Math.round(tt)));
     // say what the colours are: a reading rule applied to the network's output, not part of the network
     const legend = $('legend');
     legend.classList.toggle('hidden', !showBg);
-    if (showBg) legend.textContent = isGoals() && !goalSplit()
-      ? 'Background colour: which class point the rest of the network sends each spot nearer to — brighter blue toward the blue point A, brighter red toward the red point B, dark = halfway.'
-      : isAnchors()
-      ? 'Background colour = f(x)·(1, 0): how far the network moves each input toward the blue point (1, 0) (brighter blue) or the red point (−1, 0) (brighter red). Dark = halfway, i.e. the network is undecided there. Full colour at ±1.'
-      : 'Background colour = logit₁ − logit₂: brighter blue where the first logit wins by more, brighter red where the second does; dark = undecided. Full colour at ±4.';
+    if (showBg) legend.textContent = !isClassify() && !goalSplit()
+      ? 'Background colour: the class whose target point the rest of the network sends each spot nearest to, in that class\'s colour — brighter the clearer its lead over the next-nearest point; dark = halfway between two points.'
+      : 'Background colour: the class whose logit wins at each spot, brighter the bigger its lead over the runner-up; dark = undecided. Full colour at a lead of 4.';
     const bgStage = Math.round(tt), bgBasis = showBg && traces.bases[bgStage];
     if (bgBasis && !bgBasis.exact) {
       const ag = bgCache && bgCache.agree !== null ? ` Here it agrees with the network on ${(100 * bgCache.agree).toFixed(0)}% of the data points${
@@ -683,7 +709,7 @@
         if ((g.kind === 'classPoint' || g.kind === 'objectPoint') && g.target) {
           const col = g.kind === 'classPoint' ? CLASS_COLORS[g.cls] : (obj ? obj.color : '#e6edf3');
           items.push({ id: `goal${g.id}`, kind: 'marker', p: g.target.slice(0, vd), color: col, size: 9, ring: true });
-          if (vd === 2) items.push({ kind: 'label', p: g.target, text: `${g.kind === 'classPoint' ? (g.cls === 0 ? 'blue' : 'red') : (obj ? obj.type : 'object')} → A${dragGoal && dragGoal.id === g.id ? '' : ' (drag)'}`, color: col });
+          if (vd === 2) items.push({ kind: 'label', p: g.target, text: `${g.kind === 'classPoint' ? CLASS_NAMES[g.cls] : (obj ? obj.type : 'object')} → A${dragGoal && dragGoal.id === g.id ? '' : ' (drag)'}`, color: col });
         } else if (g.kind === 'objectStay' && obj) {
           items.push({ id: `goalStay${g.id}`, kind: 'line', pts: Float64Array.from(obj.points.flatMap((p) => p.slice(0, vd))), closed: obj.closed,
             color: obj.color, alpha: 0.45, dash: [5, 5], width: 1.5, noFit: true });
@@ -695,15 +721,16 @@
       items.push({ kind: 'line', pts: Float64Array.from([-M, -M, M, M]), color: '#e6edf3', alpha: 0.5, dash: [6, 6], width: 1.2, noFit: true });
       items.push({ kind: 'label', p: [0.6, 0.6], text: 'decision boundary (logit₁ = logit₂)', color: '#8b949e' });
     }
-    // the two target points of the "anchors" task, and the line halfway between them
+    // the target point of every class in the "anchors" task (and, for two, the line halfway between them)
     if (atOutput && isAnchors()) {
-      if (vd === 2) {
+      if (vd === 2 && nClasses() === 2) {
         items.push({ kind: 'line', pts: Float64Array.from([0, -1e3, 0, 1e3]), color: '#e6edf3', alpha: 0.35, dash: [6, 6], width: 1.2, noFit: true });
       }
-      [0, 1].forEach((c) => {
-        const a = Array.from(anchor(c));
+      const num = (v) => (Math.abs(v) < 1e-9 ? '0' : Math.abs(v - Math.round(v)) < 1e-9 ? String(Math.round(v)) : v.toFixed(2)).replace('-', '−');
+      classPoints().forEach((p, c) => {
+        const a = Array.from(p);
         items.push({ id: `anchor${c}`, kind: 'marker', p: a, color: CLASS_COLORS[c], size: 9, ring: true });
-        if (vd === 2) items.push({ kind: 'label', p: a, text: `${c === 0 ? 'blue' : 'red'} → (${a.map((v) => (v < 0 ? '−1' : v > 0 ? '1' : '0')).join(', ')})`, color: CLASS_COLORS[c] });
+        if (vd === 2) items.push({ kind: 'label', p: a, text: `${CLASS_NAMES[c]} → (${a.map(num).join(', ')})`, color: CLASS_COLORS[c] });
       });
     }
     // Jacobian ellipses
@@ -758,10 +785,8 @@
   }
 
   /**
-   * Background over the visible input region (2D, class tasks).  The colour is a plain measured number,
-   * no thresholding: v = f(x)·(1, 0) — how far the output moved toward the blue point (1, 0) versus the
-   * red point (−1, 0) — or, for logits, v = (logit₁ − logit₂)/4.  v = +1 → full blue, −1 → full red,
-   * 0 → dark (halfway); values beyond ±1 stay fully coloured.
+   * Background over the visible input region (2D, class tasks), from bgClass: the winning class's colour,
+   * with brightness ∝ its lead v (0 → dark, halfway; full colour from v = 1 on).  No thresholding.
    */
   /**
    * Network from stage s to the output.  s = 0: the input; odd s = after layer l's linear step (apply σ_l,
@@ -792,16 +817,15 @@
     const box = viz2.viewBox(), key = box.map((v) => v.toFixed(3)).join() + netVersion + trainer.step_ + '|' + stage;
     if (bgCache && bgCache.key === key) return bgCache.item;
     const W = 90, H = Math.max(10, Math.round((W * (box[3] - box[1])) / (box[2] - box[0])));
-    const rgba = new Uint8ClampedArray(W * H * 4), blue = [88, 166, 255], red = [255, 107, 107];
+    const rgba = new Uint8ClampedArray(W * H * 4);
     for (let j = 0; j < H; j++) {
       for (let i = 0; i < W; i++) {
         const x = box[0] + ((i + 0.5) * (box[2] - box[0])) / W, y = box[3] - ((j + 0.5) * (box[3] - box[1])) / H;
         const o = stage === 0 ? net.predict([x, y]) : restOfNetwork(stage, [x, y]);
-        const raw = bgValue(o);
-        const v = Math.max(-1, Math.min(1, Number.isFinite(raw) ? raw : 0));
-        const col = v >= 0 ? blue : red, k = 4 * (j * W + i);
+        const r = bgClass(o), v = Math.min(1, Number.isFinite(r.v) ? r.v : 0);
+        const col = CLASS_RGB[r.c], k = 4 * (j * W + i);
         for (let c = 0; c < 3; c++) rgba[k + c] = col[c];
-        rgba[k + 3] = Math.round(150 * Math.abs(v));      // brightness ∝ |v|: dark near the halfway line
+        rgba[k + 3] = Math.round(150 * v);                // brightness ∝ lead: dark near the halfway line
       }
     }
     // in a wide stage the picture is a 2D slice: say how often it agrees with the network on the data points
@@ -811,8 +835,7 @@
       let ok = 0;
       for (let i = 0; i < dd.st.length; i++) {
         const o = restOfNetwork(stage, [dd.proj[stage][2 * i], dd.proj[stage][2 * i + 1]]), y = net.predict(dd.pts[i]);
-        const side = (v) => bgValue(v) > 0;
-        if (side(o) === side(y)) ok++;
+        if (bgClass(o).c === bgClass(y).c) ok++;
       }
       agree = ok / dd.st.length;
     }
@@ -1384,8 +1407,12 @@
   function targetNote() {
     const z = S.dim === 3 ? ', 0' : '';
     switch (S.train.target) {
-      case 'anchors': return `Every blue point should land on (1, 0${z}) and every red point on (−1, 0${z}). Loss: squared distance to its point. Watch each class shrink onto its point.`;
-      case 'classify': return 'Two output numbers (logits): blue points should end up on one side of the line logit₁ = logit₂, red points on the other. Loss: cross-entropy.';
+      case 'anchors': return nClasses() === 2
+        ? `Every blue point should land on (1, 0${z}) and every red point on (−1, 0${z}). Loss: squared distance to its point. Watch each class shrink onto its point.`
+        : `Every class should land on its own point, spread evenly on the unit ${S.dim === 2 ? 'circle' : 'sphere'} (the rings at the output). Loss: squared distance to its point.`;
+      case 'classify': return nClasses() === 2
+        ? 'Two output numbers (logits): blue points should end up on one side of the line logit₁ = logit₂, red points on the other. Loss: cross-entropy.'
+        : `One output number (logit) per class: the points of class k should end up where logit k is the largest. Loss: cross-entropy.`;
       case 'transform': return 'Every input x should go to A·x, where A is the chosen linear map (drawn dashed at the output).';
       case 'morph': { const [a, b] = morphPair(); return `Point i of the ${NN.SHAPES[a].label} should land on point i of the ${NN.SHAPES[b].label} (drawn dashed at the output). Watch “worst point off by”: a topological obstruction leaves some points far from their target.`; }
       case 'pins': return 'With the Pin tool, drag from an input point to where its output should go; the network bends space to satisfy every pin.';
@@ -1406,14 +1433,14 @@
     'shape:diskInRing': 'An exact disk inside a ring (no noise). Sending them to two points needs the disk to leave the ring — impossible for a homeomorphism of the plane.',
     'shape:linkedRings': 'Two exact linked rings (no noise). No homeomorphism of 3D space unlinks them.',
     'shape:nestedSpheres': 'An exact ball inside a spherical shell. No homeomorphism of 3D space gets the ball out.',
-    blobs: 'Two separate clouds: one straight line already splits them, so the network hardly needs to bend space.',
+    blobs: 'Separate clouds, one per class: straight lines already split them, so the network hardly needs to bend space.',
     moons: 'Two interleaving half-moons: one bend is enough.',
     circles: 'A disk inside a ring: no line separates them, and no smooth invertible bending of the plane can move the disk out of the ring — the network has to squash space or lift the disk into an extra dimension (width ≥ 3).',
     rings: 'Blue–red–blue rings: separating the middle ring takes two folds.',
     xor: 'XOR: opposite quadrants share a colour (3D: octants by sign). No single line works — the network must fold space.',
-    wave: 'A wavy boundary: smooth but curved. Try sin activations.',
-    spirals: 'Two interleaved spirals: many folds are needed — use more layers or width.',
-    checker: 'Checkerboard: many small regions — a test of capacity (width × depth).',
+    wave: 'A wavy boundary (more classes: parallel wavy bands): smooth but curved. Try sin activations.',
+    spirals: 'Interleaved spiral arms, one per class: many folds are needed — use more layers or width.',
+    checker: 'Checkerboard: many small regions — a test of capacity (width × depth). With more classes the colours take turns along the diagonals.',
     linked: 'Two linked rings. No smooth invertible deformation of 3D space can unlink them: with width 3 the network only gets close by crushing a dimension (see Invertibility); width ≥ 4 separates them cleanly.',
     custom: 'Paint your own data with “Paint blue” / “Paint red” in the toolbar (drag to spray points).',
   };
@@ -1435,6 +1462,16 @@
     $('customCount').textContent = `${S.custom.filter((p) => p.label === 0).length} blue · ${S.custom.filter((p) => p.label === 1).length} red`;
     $('clearCustom').disabled = !S.custom.length;
     $('datasetRow').classList.toggle('hidden', !usesClasses());
+    // how many classes / points: only for the generated datasets (shapes and painted data are what they are)
+    const generated = usesClasses() && S.train.dataset !== 'custom' && !S.train.dataset.startsWith('shape:');
+    // logits need one output per class: in 2D a classification stays at two (said next to the slider)
+    const logitCap = classCap() < NN.maxClasses(S.train.dataset);
+    $('classesRow').classList.toggle('hidden', !generated || NN.maxClasses(S.train.dataset) <= 2);
+    $('nClasses').max = Math.max(3, classCap());
+    $('nClasses').disabled = classCap() <= 2;
+    $('nClasses').value = nClasses();
+    $('nClassesVal').textContent = logitCap ? `${nClasses()} (max ${classCap()}: one logit per class)` : nClasses();
+    $('nDataRow').classList.toggle('hidden', !generated);
     // morph pairs of the current dimension
     const mp = $('morphPair'), pairs = MORPHS[S.dim];
     if (!pairs.some((p) => p.join('>') === S.train.morph)) S.train.morph = pairs[0].join('>');
@@ -1450,6 +1487,7 @@
 
   function onTargetChange() {
     if (isGoals() && !S.train.goals.length) S.train.goals = defaultGoals();
+    else syncClassGoals();
     syncTargetUI();
     rebuildTrainer();
     invalidate();
@@ -1626,7 +1664,9 @@
     $('resetView').onclick = () => { viz2.cx = viz2.cy = 0; viz2.scale = Math.min(viz2.w, viz2.h) / 6; if (viz3) { viz3.orbit = { theta: 0.8, phi: 1.1, radius: 7 }; viz3.target.set(0, 0, 0); } };
 
     $('target').onchange = (e) => { S.train.target = e.target.value; training = false; onTargetChange(); };
-    $('dataset').onchange = (e) => { S.train.dataset = e.target.value; training = false; rebuildTrainer(); syncTargetUI(); renderToolbar(); invalidate(); };
+    $('dataset').onchange = (e) => { S.train.dataset = e.target.value; training = false; syncClassGoals(); rebuildTrainer(); syncTargetUI(); renderToolbar(); invalidate(); };
+    $('nClasses').addEventListener('input', (e) => { S.train.nClasses = +e.target.value; training = false; syncClassGoals(); rebuildTrainer(); syncTargetUI(); invalidate(); });
+    syncers.push(bindRange('nData', () => S.train.nData, (v) => { S.train.nData = v; }, (v) => v, () => { training = false; rebuildTrainer(); invalidate(); }));
     $('clearCustom').onclick = () => { training = false; S.custom = []; rebuildTrainer(); syncTargetUI(); invalidate(); };
     $('morphPair').onchange = (e) => { S.train.morph = e.target.value; training = false; rebuildTrainer(); syncTargetUI(); invalidate(); };
     $('homeo').onchange = (e) => {
@@ -1734,7 +1774,7 @@
     setDim(g.dim);
     const T = S.train, d = g.data || {};
     T.target = g.problem;
-    if (g.problem === 'classify' || g.problem === 'goals') Object.assign(T, { dataset: d.dataset, nData: d.n, noise: d.noise, dataSeed: d.seed || 0 });
+    if (g.problem === 'classify' || g.problem === 'goals') Object.assign(T, { dataset: d.dataset, nData: d.n, noise: d.noise, dataSeed: d.seed || 0, nClasses: d.k || 2 });
     if (g.problem === 'goals') T.goals = defaultGoals();
     else if (g.problem === 'transform') Object.assign(T, { transform: d.map, amount: d.amount });
     else if (g.problem === 'morph') T.morph = d.pair;
@@ -1749,7 +1789,7 @@
     fitView();
     flashHint(g.problem === 'none'
       ? 'Press ▶ in the strip below (or Space) to send the grid through the network, layer by layer.'
-      : 'Press ▶ Train (bottom right, or T) to start training, and watch the space bend.');
+      : 'Press ▶ Train (below, or T) to start training, and watch the space bend.');
   }
 
   // ===========================================================================
@@ -2009,7 +2049,8 @@
       const K = GOAL_KINDS[g.kind];
       let body = '';
       if (g.kind === 'classPoint') {
-        body += `<div class="row"><label>Class</label><select data-g="${g.id}" data-k="cls"><option value="0"${g.cls === 0 ? ' selected' : ''}>blue</option><option value="1"${g.cls === 1 ? ' selected' : ''}>red</option></select></div>`;
+        body += `<div class="row"><label>Class</label><select data-g="${g.id}" data-k="cls">${CLASS_NAMES.slice(0, nClasses()).map((n, c) =>
+          `<option value="${c}"${g.cls === c ? ' selected' : ''}>${n}</option>`).join('')}</select></div>`;
       }
       if (g.kind === 'objectPoint' || g.kind === 'objectStay') {
         body += S.objects.length ? `<div class="row"><label>Object</label><select data-g="${g.id}" data-k="obj">${objOpts(g.obj)}</select></div>`
@@ -2041,10 +2082,15 @@
 
   function addGoal(kind) {
     const z = S.dim === 3 ? [0] : [], g = { id: goalNextId++, kind, weight: 1 };
-    if (kind === 'classPoint') { const used = S.train.goals.filter((x) => x.kind === 'classPoint').map((x) => x.cls); g.cls = used.includes(0) ? 1 : 0; g.target = [g.cls ? -1 : 1, 0, ...z]; }
+    if (kind === 'classPoint') {
+      const used = S.train.goals.filter((x) => x.kind === 'classPoint').map((x) => x.cls), K = nClasses();
+      g.cls = Math.max(0, [...Array(K).keys()].findIndex((c) => !used.includes(c)));
+      g.target = Array.from(NN.classTargets(K, S.dim)[g.cls]);
+    }
     if (kind === 'objectPoint') { g.target = [0, 1, ...z]; }
     if (kind === 'objectPoint' || kind === 'objectStay') g.obj = S.objects.length ? S.objects[S.objects.length - 1].id : undefined;
     S.train.goals.push(g);
+    syncClassGoals();             // a "separate the classes" goal caps the classes at one per logit
     renderGoals(); rebuildTrainer(); invalidate();
   }
 
@@ -2054,8 +2100,10 @@
     box.addEventListener('click', (e) => {
       const b = e.target.closest('[data-k="remove"]');
       if (!b) return;
-      S.train.goals = S.train.goals.filter((g) => g.id !== +b.dataset.g);
-      renderGoals(); rebuildTrainer(); invalidate();
+      const gone = S.train.goals.find((g) => g.id === +b.dataset.g);
+      S.train.goals = S.train.goals.filter((g) => g !== gone);
+      if (gone && gone.kind === 'classSplit' && !goalSplit()) syncClassGoals();   // the classes may grow back
+      renderGoals(); rebuildTrainer(); invalidate(); syncTargetUI();
     });
     box.addEventListener('input', (e) => {
       const el = e.target, g = S.train.goals.find((x) => x.id === +el.dataset.g), k = el.dataset.k;
@@ -2314,16 +2362,6 @@
     try { renderObjLog(); } catch (err) { console.error(err); }
   }
 
-  function addExamples() {
-    const n = S.nPoints;
-    if (S.dim === 2) {
-      addObject({ type: 'circle', closed: true, points: linspace(0, 2 * Math.PI, n + 1).slice(0, n).map((a) => [0.75 + 0.35 * Math.cos(a), 0.55 + 0.35 * Math.sin(a)]) });
-      addObject({ type: 'curve', closed: false, points: linspace(-1.7, -0.1, n).map((x) => [x, -0.75 + 0.3 * Math.sin(5 * x)]) });
-    } else {
-      addObject({ type: 'sphere', closed: false, points: NN.fibonacciSphere(n, [0.6, 0.3, 0.2], 0.45).map((p) => Array.from(p)) });
-    }
-  }
-
   function setDim(d) {
     if (d === S.dim) return;
     const keep = { net: S.net, train: S.train, display: S.display, nPoints: S.nPoints, analysis: S.analysis };
@@ -2343,7 +2381,6 @@
     if (viz3) viz3.resize();
     if (d === 2) viz2.resize();      // the view may have changed size (drawer, panels) while the 2D canvas was hidden
     rebuildNet();
-    addExamples();
     syncControls();
   }
 
@@ -2378,6 +2415,7 @@
       display: { ...base.display, ...(j.display || {}) }, train: { ...base.train, ...(j.train || {}) },
       analysis: { ...base.analysis, ...(j.analysis || {}) }, sphere: { ...base.sphere, ...(j.sphere || {}) } };
     delete merged.weights; delete merged.dims;
+    if (!j.train || j.train.nClasses === undefined) merged.train.nClasses = 2;   // older files: always two classes
     const t0 = merged.train.target;                       // older files: one menu for task + dataset
     if (['moons', 'circles', 'spirals'].includes(t0)) Object.assign(merged.train, { target: 'classify', dataset: t0 });
     if (['rotation', 'shear', 'scaling'].includes(t0)) Object.assign(merged.train, { target: 'transform', transform: t0 });
@@ -2773,8 +2811,8 @@
     setupShortcuts();
     setupHelp();
     bind2DMouse();
+    S.train.goals = defaultGoals();
     rebuildNet();
-    addExamples();
     syncControls();
     viz2.resize();
     viz2.scale = Math.min(viz2.w, viz2.h) / 6;

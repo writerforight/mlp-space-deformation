@@ -141,11 +141,12 @@ def check_strip(b):
     b.click('.pipe .pn[data-stage="3"]'); time.sleep(2.5)
     t = b.js('return __app.t')
     assert abs(t - 3) < 0.05, t
+    n0 = b.js('return __app.net.nLayers')
     b.click('#layerPlus'); time.sleep(0.4)
     n = b.js("return [__app.net.nLayers, document.querySelectorAll('.pipe .pb').length]")
-    assert n == [4, 4], n
+    assert n == [n0 + 1, n0 + 1], n
     b.click('#layerMinus'); time.sleep(0.4)
-    assert b.js('return __app.net.nLayers') == 3
+    assert b.js('return __app.net.nLayers') == n0
 
 
 def check_objects(b):
@@ -157,9 +158,11 @@ def check_objects(b):
     o = b.js('const o=__app.S.objects.at(-1); return [o.points.length,o.scale,o.offset[0]]')
     assert o == [120, 1.5, -0.8], o
     b.click('[data-edit="log"]'); time.sleep(0.8)
-    assert b.js("return document.querySelectorAll('#objLog tr[data-s]').length") == 7
-    # move an object on the view, then resize it by its corner
+    assert b.js("return document.querySelectorAll('#objLog tr[data-s]').length") == b.js('return 2 * __app.net.nLayers + 1')   # one row per stage
+    # move an object on the view, then resize it by its corner (the page opens without objects: add one)
     b.open()
+    assert b.js('return __app.S.objects.length') == 0
+    b.click('#objBtn'); time.sleep(0.2); b.click('#presetBtns [data-preset="star"]'); time.sleep(0.3); b.click('#objBtn'); time.sleep(0.2)
     p = b.js('return __app.S.objects[0].points[0]')
     b.drag(p[0], p[1], p[0] + 0.5, p[1] - 0.8); time.sleep(0.3)
     assert [round(v, 2) for v in b.js('return __app.S.objects[0].offset')] == [0.5, -0.8]
@@ -186,9 +189,29 @@ def check_goals(b):
     assert g[0] == [1, 1.5] and g[1] == [1, 1.5], g
     b.click('#goalAdd [data-kind=objectStay]'); time.sleep(0.2); b.click('#goalAdd [data-kind=classSplit]'); time.sleep(0.2)
     assert set(b.js("return __app.trainer.tasks[0].map(q=>q.type)")) == {'mse', 'ce'}
+    n_goals = len(b.js('return __app.S.train.goals'))
     exp = b.js('return JSON.stringify(__app.serializeState())')
     b.js(f'__app.importState({json.dumps(exp)})'); time.sleep(0.4)
-    assert len(b.js('return __app.S.train.goals')) == 4
+    assert len(b.js('return __app.S.train.goals')) == n_goals
+
+
+def check_default_task_and_classes(b):
+    b.open()
+    st = b.js("const S=__app.S; return [S.train.target, S.train.dataset, S.train.nClasses, S.objects.length, S.train.goals.length]")
+    assert st == ['goals', 'spirals', 3, 0, 3], st
+    b.train(5)
+    assert b.js('return __app.trainer.step_') > 100       # ▶ Train does something on a fresh page
+    b.click('#drawerBtn'); time.sleep(0.2)
+    b.set('nClasses', '4'); time.sleep(0.3)
+    labels = b.js('return [...new Set(__app.trainer.tasks[0].map(q=>q.label))].sort()')
+    targets = b.js('return __app.S.train.goals.map(g=>g.target.map(v=>Math.round(v*100)/100))')
+    assert labels == [0, 1, 2, 3] and targets == [[1, 0], [0, 1], [-1, 0], [0, -1]], (labels, targets)
+    b.set('nData', '1000'); time.sleep(0.3)
+    assert b.js('return __app.trainer.tasks[0].length') == 1000
+    b.set('dataset', 'moons', 'change'); time.sleep(0.3)        # moons only come in two
+    assert b.js('return __app.S.train.goals.length') == 2
+    b.set('dataset', 'spirals', 'change'); b.set('target', 'classify', 'change'); time.sleep(0.3)
+    assert b.js("return [document.getElementById('nClasses').disabled, new Set(__app.trainer.tasks[0].map(q=>q.y)).size]") == [True, 2]
 
 
 def check_pins_goal(b):
@@ -256,6 +279,7 @@ def check_dimension_switch(b):
 
 def check_basis_box_and_inspector(b):
     b.open()
+    b.js("__app.applyGuided({dim:2,problem:'none',network:{layers:3,width:2,act:'tanh',outputLinear:false}})"); time.sleep(0.4)
     b.js('__app.scrubTo(3)'); time.sleep(0.4)
     box = b.js("return document.getElementById('basisBox').innerText")
     z = b.js("return Array.from(__app.net.stages([1,0])[3]).map(v=>v.toFixed(2).replace('-','−')).join(', ')")
@@ -272,7 +296,7 @@ def check_narrow_screen(b):
     assert r[0] <= r[1] + 1 and r[2] <= r[3], r
 
 
-CHECKS = [check_guided_start, check_guided_goals_and_tour, check_shell_panels, check_strip, check_objects, check_goals,
+CHECKS = [check_guided_start, check_guided_goals_and_tour, check_shell_panels, check_strip, check_objects, check_goals, check_default_task_and_classes,
           check_pins_goal, check_timeline, check_view_background_and_tilt, check_dimension_switch, check_basis_box_and_inspector]
 
 

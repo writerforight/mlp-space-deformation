@@ -278,6 +278,7 @@
   button.on { background: var(--accent2); border-color: var(--accent); }
   button.primary { background: var(--accent2); border-color: var(--accent); }
   button:disabled { opacity: 0.45; cursor: default; }
+  input[type=range]:disabled { opacity: 0.4; cursor: default; }
   .btns { display: flex; gap: 4px; flex-wrap: wrap; margin: 6px 0; }
   .seg { display: inline-flex; }
   .seg button { border-radius: 0; margin-left: -1px; }
@@ -565,7 +566,7 @@
           <label data-tip="Colour by the sign of det(J): green keeps orientation, violet is mirrored (a fold), grey is collapsed."><input id="showDet" type="checkbox"> det(J) sign</label>
           <label data-tip="Colour each point by how far it has moved from its input position."><input id="showDist" type="checkbox"> Distance moved</label>
           <label data-tip="A box under the stage name: where o, e₁, e₂ (e₃) are before this layer, after its linear step and after its activation — in the layer's real coordinates."><input id="showBasisInfo" type="checkbox"> Basis vectors box</label>
-          <label data-tip="Classification tasks: colour the background by where the rest of the network sends each spot (blue / red = the class that wins, dark = undecided). Shown at every stage; in a stage wider than 2 it is the PCA plane of that stage."><input id="showBg" type="checkbox"> Class background</label>
+          <label data-tip="Classification tasks: colour the background by where the rest of the network sends each spot (the colour of the class that wins, dark = undecided). Shown at every stage; in a stage wider than 2 it is the PCA plane of that stage."><input id="showBg" type="checkbox"> Class background</label>
         </div>
         <div class="group-label">Wide layers (2D)</div>
         <div class="checks single">
@@ -765,6 +766,20 @@
             <option value="morph">turn one shape into another</option>
             <option value="pins">pinned points</option>
           </select></div>
+        <div class="row" id="datasetRow"><label data-tip="The class dataset: blue is class 1, red class 2, green class 3, orange class 4.">Data</label>
+          <select id="dataset">
+            <optgroup label="Easy"><option value="blobs">two blobs (already separable)</option><option value="moons">two moons</option><option value="circles">disk inside a ring</option></optgroup>
+            <optgroup label="Harder"><option value="xor">XOR</option><option value="wave">wavy boundary</option><option value="rings">three rings</option></optgroup>
+            <optgroup label="Hard"><option value="spirals">spirals</option><option value="checker">checkerboard</option><option value="linked">linked rings (3D)</option></optgroup>
+            <optgroup label="Exact shapes (no noise)"><option value="shape:diskInRing">disk inside a ring (2D)</option><option value="shape:linkedRings">two linked rings (3D)</option><option value="shape:nestedSpheres">ball inside a shell (3D)</option></optgroup>
+            <optgroup label="Your own"><option value="custom">paint your own (2D)</option></optgroup>
+          </select></div>
+        <div class="row" id="classesRow"><label data-tip="How many classes the data has (blue, red, green, orange). Some datasets only come in two; logits need one output per class.">Classes</label>
+          <input id="nClasses" type="range" min="2" max="4" step="1"><span class="val" id="nClassesVal"></span></div>
+        <div class="row" id="nDataRow"><label data-tip="How many training points are drawn.">Points</label>
+          <input id="nData" type="range" min="100" max="2000" step="50"><span class="val" id="nDataVal"></span></div>
+        <div class="note" id="datasetNote"></div>
+        <div class="btns" id="customRow"><button id="clearCustom" data-tip="Remove all painted points.">Clear painted points</button><span class="tag" id="customCount"></span></div>
         <div id="goalsBox" class="hidden" data-sec="goalsbox">
           <div id="goalsList"></div>
           <div class="group-label">Add a goal</div>
@@ -777,16 +792,6 @@
           </div>
           <div class="note" id="goalsTotal"></div>
         </div>
-        <div class="row" id="datasetRow"><label data-tip="Two-class dataset: blue is class 1, red is class 2.">Data</label>
-          <select id="dataset">
-            <optgroup label="Easy"><option value="blobs">two blobs (already separable)</option><option value="moons">two moons</option><option value="circles">disk inside a ring</option></optgroup>
-            <optgroup label="Harder"><option value="xor">XOR</option><option value="wave">wavy boundary</option><option value="rings">three rings</option></optgroup>
-            <optgroup label="Hard"><option value="spirals">spirals</option><option value="checker">checkerboard</option><option value="linked">linked rings (3D)</option></optgroup>
-            <optgroup label="Exact shapes (no noise)"><option value="shape:diskInRing">disk inside a ring (2D)</option><option value="shape:linkedRings">two linked rings (3D)</option><option value="shape:nestedSpheres">ball inside a shell (3D)</option></optgroup>
-            <optgroup label="Your own"><option value="custom">paint your own (2D)</option></optgroup>
-          </select></div>
-        <div class="note" id="datasetNote"></div>
-        <div class="btns" id="customRow"><button id="clearCustom" data-tip="Remove all painted points.">Clear painted points</button><span class="tag" id="customCount"></span></div>
         <div class="row" id="morphRow"><label data-tip="Point i of the first shape should go to point i of the second (same parametrisation).">Shapes</label>
           <select id="morphPair"></select></div>
         <div class="row" id="transformRow"><label data-tip="The linear map A the network should learn: x ↦ A·x.">Map</label>

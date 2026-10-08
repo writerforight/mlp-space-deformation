@@ -207,5 +207,23 @@ for (const act of NN.ACTIVATION_NAMES) {
   check('Fibonacci sphere points have radius 1', sph.every((p) => Math.abs(NN.norm(p) - 1) < 1e-12));
 }
 
+// ---- datasets with more than two classes ---------------------------------------------------------------
+{
+  for (const dim of [2, 3]) for (const K of [2, 3, 4]) {
+    const T = NN.classTargets(K, dim);
+    const d = (a, b) => Math.hypot(...a.map((v, i) => v - b[i]));
+    // 2D: neighbours around the circle equally far apart; 3D: every pair (line, triangle, tetrahedron)
+    const pairs = []; for (let i = 0; i < K; i++) for (let j = i + 1; j < K; j++) if (dim === 3 || j === i + 1 || (i === 0 && j === K - 1)) pairs.push(d(T[i], T[j]));
+    check(`${K} class targets in ${dim}D: on the unit ${dim === 2 ? 'circle, evenly spaced' : 'sphere, all pairs equally far'}`,
+      T.length === K && T.every((p) => Math.abs(NN.norm(p) - 1) < 1e-12) && Math.max(...pairs) - Math.min(...pairs) < 1e-12);
+  }
+  const sp = NN.makeDataset('spirals', 400, 2, new NN.Rng(3), 0.08, 4);
+  check('four spiral arms: balanced labels 0–3', [0, 1, 2, 3].every((c) => sp.filter((s) => s.y === c).length === 100));
+  const mo = NN.makeDataset('moons', 100, 2, new NN.Rng(3), 0.08, 4);
+  check('moons stay at two classes', new Set(mo.map((s) => s.y)).size === 2);
+  const a = NN.makeDataset('wave', 200, 2, new NN.Rng(5)), b = NN.makeDataset('wave', 200, 2, new NN.Rng(5), 0.08, 2);
+  check('K = 2 draws the same samples as before', a.every((s, i) => s.y === b[i].y && s.x.every((v, k) => v === b[i].x[k])));
+}
+
 console.log(failed ? `\n${failed} test(s) FAILED` : '\nall tests passed');
 process.exit(failed ? 1 : 0);

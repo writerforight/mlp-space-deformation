@@ -437,21 +437,22 @@
   // ===========================================================================
 
   /**
-   * Two-class toy datasets.  Returns [{ x, y }] with y ∈ {0, 1} (classes alternate, so they are balanced).
-   * dim = 2 or 3.  Kinds:
-   *   blobs    two Gaussian clouds — already linearly separable (the network barely needs to bend space)
+   * Toy class datasets.  Returns [{ x, y }] with y ∈ {0, …, K − 1} (classes take turns, so they are balanced).
+   * dim = 2 or 3; K = number of classes, up to maxClasses(kind) (2 for the kinds that only make sense with two).
+   * With K = 2 every kind draws exactly the samples it always did.  Kinds:
+   *   blobs    Gaussian clouds, one per class — already linearly separable (K > 2: centres at the class targets)
    *   moons    two interleaving half-circles
-   *   circles  a disk inside a ring (3D: a ball inside a shell)
+   *   circles  a disk inside a ring (3D: a ball inside a shell); K > 2: a disk inside K − 1 nested rings
    *   rings    blue–red–blue nested rings: the middle ring needs two folds
    *   xor      opposite quadrants share a class (3D: octants by sign parity) — needs a fold
-   *   checker  checkerboard (4×4 in 2D, 3×3×3 in 3D) — many regions, tests capacity
-   *   wave     a wavy (sine) boundary
-   *   spirals  two interleaved spiral arms
+   *   checker  checkerboard (4×4 in 2D, 3×3×3 in 3D) — many regions, tests capacity; class = (Σ cell index) mod K
+   *   wave     a wavy (sine) boundary; K > 2: K bands between K − 1 parallel wavy boundaries
+   *   spirals  K interleaved spiral arms, turned 2π/K apart
    *   linked   (3D) two interlocked rings — a Hopf link: no continuous invertible map of 3D space can
    *            pull them apart.  A width-3 network only gets close by making a weight matrix (nearly)
    *            singular — crushing a dimension — and still plateaus; with width ≥ 4 it separates them cleanly.
    */
-  function makeDataset(kind, n, dim, rng, noise = 0.08) {
+  function makeDataset(kind, n, dim, rng, noise = 0.08, K = 2) {
     const out = [];
     const jitter = () => noise * rng.normal();
     const box = (e) => [...Array(dim)].map(() => rng.uniform(-e, e));
@@ -464,11 +465,15 @@
       return box(e);
     };
     if (kind === 'linked' && dim === 2) kind = 'rings';   // the link only exists in 3D
+    K = Math.max(2, Math.min(K, maxClasses(kind)));
+    const centres = classTargets(K, dim);
+    // wave: K − 1 parallel boundaries f = b_j, evenly spaced around 0 (K = 2: the single boundary f = 0)
+    const bands = [...Array(K - 1)].map((_, j) => (j + 1 - K / 2) * (2.4 / K));
     for (let i = 0; i < n; i++) {
-      const c = i % 2;
+      const c = i % K;
       let p;
       if (kind === 'blobs') {
-        const m = c === 0 ? [0.8, 0.5, 0.4] : [-0.8, -0.5, -0.4];
+        const m = K === 2 ? (c === 0 ? [0.8, 0.5, 0.4] : [-0.8, -0.5, -0.4]) : Array.from(centres[c], (v) => 1.1 * v);
         p = [...Array(dim)].map((_, k) => m[k] + 0.35 * rng.normal());
       } else if (kind === 'moons') {
         const t = Math.PI * rng.next();
@@ -477,7 +482,8 @@
         if (dim === 3) p.push(0.3 * jitter());
       } else if (kind === 'circles' || kind === 'rings') {
         // circles: disk (blue) inside ring (red); rings: blue / red / blue
-        const r = kind === 'circles' ? (c === 0 ? 0.5 : 1.3) : (c === 1 ? 0.95 : (rng.next() < 0.4 ? 0.4 : 1.5));
+        const r = kind === 'rings' ? (c === 1 ? 0.95 : (rng.next() < 0.4 ? 0.4 : 1.5))
+          : K === 2 ? (c === 0 ? 0.5 : 1.3) : (c === 0 ? 0.35 : 0.35 + (1.15 * c) / (K - 1));
         if (dim === 3) {                         // spherical shells
           const u = 2 * rng.next() - 1, phi = 2 * Math.PI * rng.next(), s = Math.sqrt(1 - u * u);
           p = [r * s * Math.cos(phi) + jitter(), r * s * Math.sin(phi) + jitter(), r * u + jitter()];
@@ -495,27 +501,42 @@
             const u = (v + e) / w, k = Math.min(cells - 1, Math.floor(u));
             sum += k; margin = Math.min(margin, w * Math.min(u - k, k + 1 - u));
           }
-          return { label: sum % 2, margin };
+          return { label: sum % K, margin };
         }, e, 0.05);
       } else if (kind === 'wave') {
         const f = (q) => (dim === 2 ? q[1] - 0.6 * Math.sin(2.4 * q[0]) : q[2] - 0.6 * Math.sin(2 * q[0]) * Math.cos(2 * q[1]));
-        p = region(c, (q) => ({ label: f(q) > 0 ? 0 : 1, margin: Math.abs(f(q)) }), 1.6, 0.08);
+        p = region(c, (q) => { const v = f(q); return { label: bands.filter((b) => v < b).length, margin: Math.min(...bands.map((b) => Math.abs(v - b))) }; }, 1.6, 0.08);
       } else if (kind === 'linked') {
         // ring 0 in the xy-plane around (−0.5, 0, 0); ring 1 in the xz-plane around (0.5, 0, 0):
         // each ring passes through the other's centre, so they are linked
         const t = 2 * Math.PI * rng.next();
         p = c === 0 ? [-0.5 + Math.cos(t), Math.sin(t), 0] : [0.5 - Math.cos(t), 0, Math.sin(t)];
         p = p.map((v) => v + jitter());
-      } else { // spirals: two interleaved arms
+      } else { // spirals: K interleaved arms
         const t = 0.25 + 2.6 * rng.next();
         const r = 0.25 + 0.55 * t;
-        const a = t * 1.9 + c * Math.PI;
+        const a = t * 1.9 + (c * 2 * Math.PI) / K;
         p = [r * Math.cos(a) * 0.8 + 0.6 * jitter(), r * Math.sin(a) * 0.8 + 0.6 * jitter()];
         if (dim === 3) p.push(0.25 * (t - 1.5) + 0.5 * jitter());
       }
       out.push({ x: Float64Array.from(p), y: c });
     }
     return out;
+  }
+
+  /** Most classes a dataset kind can be drawn with (the rest only make sense with two). */
+  const MAX_CLASSES = { blobs: 4, circles: 4, spirals: 4, checker: 4, wave: 4 };
+  const maxClasses = (kind) => MAX_CLASSES[kind] || 2;
+
+  /**
+   * K target points spread evenly on the unit circle / sphere, one per class.  2D: angles 2πk/K, so K = 2
+   * gives (1, 0) and (−1, 0).  3D: ±e1 for two classes, an equilateral triangle in the xy-plane for three, a
+   * regular tetrahedron for four (every pair equally far apart).  K ≤ 4.
+   */
+  function classTargets(K, dim) {
+    if (dim === 2) return [...Array(K)].map((_, k) => Float64Array.from([Math.cos((2 * Math.PI * k) / K), Math.sin((2 * Math.PI * k) / K)]));
+    if (K <= 3) return [...Array(K)].map((_, k) => Float64Array.from([Math.cos((2 * Math.PI * k) / K), Math.sin((2 * Math.PI * k) / K), 0]));
+    return [[1, 1, 1], [-1, -1, 1], [-1, 1, -1], [1, -1, -1]].map((v) => Float64Array.from(v, (x) => x / Math.sqrt(3)));
   }
 
   /** Linear target maps A (d×d) for "match a fixed transform". */
@@ -976,7 +997,7 @@
 
   const NN = {
     Rng, ACTIVATIONS, ACTIVATION_NAMES, MLP, mse, crossEntropy, sampleLoss, batchLossGrad, meanLoss,
-    SGD, Adam, dot, norm, symEig, singularValues, rankOf, pcaBasis, makeDataset, targetMatrix, matVec,
+    SGD, Adam, dot, norm, symEig, singularValues, rankOf, pcaBasis, makeDataset, maxClasses, classTargets, targetMatrix, matVec,
     makeTransformData, fibonacciSphere, SHAPES, makeShape, morphData, squareSvd, clampSingularValues, det, orientPositive, Trainer, gradientCosine, ntkMatrix, spectralNorm, lipschitz, layerReport,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = NN;
