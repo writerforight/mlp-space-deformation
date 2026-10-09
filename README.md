@@ -1,6 +1,6 @@
-# Neural Space Deformation
+# Neural Nets Space Bending
 
-**Neural Space Deformation is an interactive, browser-only visualization of what a small neural network
+**Neural Nets Space Bending is an interactive, browser-only visualization of what a small neural network
 (MLP) does geometrically:** every layer bends, stretches, folds and squashes space, and backpropagation
 reshapes those deformations while it trains. It was built by
 [Eren Can Almaz](https://writerforight.github.io), an Electrical Engineering student at RWTH Aachen
@@ -42,8 +42,9 @@ One big view; everything else opens on demand, and one panel at a time (✕, Esc
 - **The strip at the bottom is the network**: `Input ▸ [W₁ | tanh] ▸ … ▸ Output`. Click a step to go there,
   drag along the strip to scrub, ⓘ inspects a layer, − / ＋ change the depth. ▶ Train sits on the right;
   **Model ▲** opens network | goal | training settings.
-- **Training timeline**: once a network has trained, a video-style bar on the view shows the loss of the
-  whole run. Drag on it to see the network at any earlier step, ⏵ replays the training, ● live returns;
+- **After training**: a big ▶ on the view plays the trained network, layer by layer. The **history** bar
+  in the strip (under the network, right of Train on wide screens) shows the loss of the whole run. Drag on it
+  to see the network at any earlier step, ⏵ replays how training changed the layer in view, ● live returns;
   training from an old step continues from there.
 - **Tools**: click the active tool again, the tool badge on the view, or Esc to go back to panning; the
   Objects panel stays open while you draw.

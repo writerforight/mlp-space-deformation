@@ -7,8 +7,8 @@
    A marker shows where the view is right now, also between stages.  On a phone-wide screen the strip is
    compact — In · 1 · 2 · … · Out, one button per layer (its output); tapping the current layer again opens
    its inspector, and dragging along the strip still passes through every stage.  Once there is training, a video-style
-   bar on the view shows the loss of the whole run: drag on it to see the network at an earlier step,
-   ⏵ replays it, ● live returns.
+   bar right of Train shows the loss of the whole run: drag on it to see the network at an earlier step,
+   ⏵ replays it (at the layer in view), ● live returns.  The big ▶ on the view plays the trained network's layers.
 */
 (function () {
   'use strict';
@@ -191,6 +191,7 @@
     })(t0);
   };
   $('trainPlay').addEventListener('click', stopReplay, true);
+  $('bendBtn').onclick = () => { stopReplay(); if (!App.playing) $('play').click(); };
 
   // ---- every frame: rebuild if the network changed, move the marker, light up the current slot ----------
   function frame() {
@@ -210,6 +211,8 @@
       });
     }
     drawSpark();
+    // after training, the big ▶ on the view: hidden while the layers play or training runs
+    $('bendBtn').classList.toggle('hidden', $('timeline').classList.contains('hidden') || App.playing || App.training || !!replay);
     requestAnimationFrame(frame);
   }
   build();

@@ -350,6 +350,11 @@ def check_timeline(b):
     assert i is not None and b.js(f'return __app.net.theta[0] === __app.history[{i}].theta[0]')
     b.click('#liveBtn'); time.sleep(0.2)
     assert b.js('return __app.viewIdx') is None
+    # the history bar sits in the strip; the big ▶ on the view plays the trained network's layers
+    assert b.js("return !!document.querySelector('#modelStrip #timeline')")
+    assert b.js("return !document.getElementById('bendBtn').classList.contains('hidden')")
+    b.click('#bendBtn'); time.sleep(0.2)
+    assert b.js('return __app.playing')
 
 
 def check_view_background_and_tilt(b):

@@ -1079,7 +1079,7 @@
       title = `${a.title} → ${b.title}`; lines = [`morphing ${(100 * (t - Math.floor(t))).toFixed(0)}%`];
     }
     $('ticks').textContent = `stage ${t.toFixed(2)} / ${n - 1}`;
-    $('play').textContent = playing ? '⏸' : '▶';
+    $('play').textContent = playing ? '⏸' : '▶'; $('play').classList.toggle('on', playing);
     const P = traces.bases[Math.min(n - 1, Math.max(0, s))];
     if (P && !P.exact) {
       const D3 = depthInfo[Math.min(n - 1, Math.max(0, s))];

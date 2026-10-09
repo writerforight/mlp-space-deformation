@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Neural Space Deformation</title>
+<title>Neural Nets Space Bending</title>
 <meta name="author" content="Eren Can Almaz">
-<meta name="description" content="Interactive visualization of how a small MLP deforms space, layer by layer, and how backpropagation reshapes it. Plain JavaScript, no ML libraries.">
+<meta name="description" content="Interactive visualization of how a small MLP bends space, layer by layer, and how backpropagation reshapes it. Layers wider than the view are shown through PCA. Plain JavaScript, no ML libraries.">
 <!-- link previews (LinkedIn, Slack, X, …) -->
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://writerforight.github.io/mlp-space-deformation/">
-<meta property="og:title" content="Neural Space Deformation">
+<meta property="og:title" content="Neural Nets Space Bending">
 <meta property="og:description" content="Watch a neural network bend space, layer by layer, live in your browser. Train it, drag its targets, look inside every layer. No install.">
 <meta property="og:image" content="https://writerforight.github.io/mlp-space-deformation/docs/og-cover.png">
 <meta property="og:image:width" content="1200">
@@ -182,24 +182,52 @@
   button.danger:disabled { color: var(--muted); border-color: var(--line); background: none; }
   #lossSpark { cursor: ew-resize; }
   #liveBtn { color: #ff6b6b; border-color: #ff6b6b; }
-  #timeline { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 5; width: min(640px, calc(100% - 280px));
-    display: flex; align-items: center; gap: 10px; padding: 6px 12px; border-radius: 12px;
-    background: rgba(22, 27, 34, 0.92); border: 1px solid var(--line); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35); }
+  /* training history: its own row under the network and Train; on wide screens right of Train */
+  #modelStrip { flex-wrap: wrap; row-gap: 4px; }
+  .ms-row { display: flex; align-items: center; gap: inherit; justify-content: inherit; flex: 1 1 auto; min-width: 0; }   /* network + Train never split */
+  #timeline { display: flex; align-items: center; justify-content: center; gap: 8px; flex: 1 0 100%; min-width: 0; }
+  #timeline #lossSpark { flex: 0 1 420px; }
+  @media (min-width: 1700px) {
+    #timeline { flex: 0 1 340px; padding-left: 18px; border-left: 1px solid var(--line); }
+    #timeline #lossSpark { flex: 1; }
+  }
+  /* the big ▶ on the view after training: plays the layers, not the training */
+  #bendBtn { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 5; padding: 10px 22px; border-radius: 24px;
+    font-size: 15px; font-weight: 650; white-space: nowrap; box-shadow: 0 0 0 3px rgba(31, 111, 235, 0.25), 0 8px 28px rgba(31, 111, 235, 0.45); }
   #timeline .tl-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
   #timeline #replayBtn { border-radius: 50%; width: 30px; height: 30px; padding: 0; background: var(--accent2); border-color: var(--accent); }
-  #lossSpark { flex: 1; min-width: 80px; height: 30px; display: block; }
-  #lossVal { min-width: 92px; text-align: right; font-variant-numeric: tabular-nums; }
+  #lossSpark { flex: 1; min-width: 70px; height: 28px; display: block; }
+  #lossVal { min-width: 70px; text-align: right; font-variant-numeric: tabular-nums; }
   #lossVal { font-size: 10px; font-variant-numeric: tabular-nums; }
   .ms-train { display: flex; align-items: center; gap: 8px; padding-left: 14px; border-left: 1px solid var(--line); }
   #drawerBtn.on { background: var(--panel2); border-color: var(--accent); }
   @media (min-width: 821px) {   /* desktop: Train and Model sit in the centre, right after the network, and stand out */
-    #modelStrip { justify-content: center; gap: 22px; }
+    #modelStrip { justify-content: center; gap: 18px; }
     .ms-layers { flex: 0 1 auto; }
     .ms-train { gap: 10px; padding-left: 22px; }
     #trainPlay { min-width: 124px; padding: 8px 20px; font-size: 15px; font-weight: 650;
       box-shadow: 0 0 0 3px rgba(31, 111, 235, 0.22), 0 4px 16px rgba(31, 111, 235, 0.35); }
     #drawerBtn { padding: 8px 14px; font-size: 14px; font-weight: 600; border-color: var(--accent); }
+    /* the network you play through: bigger stages, a big round ▶ */
+    .pipe { gap: 4px; padding: 8px 2px 12px; }
+    .pipe .pn { padding: 7px 10px; font-size: 13.5px; }
+    .pipe .pb .pn { padding: 7px 6px; }
+    .pipe .pb { border-radius: 10px; padding: 3px; }
+    .pipe .pb .pn.s { font-size: 12px; }
+    .pipe .pi { font-size: 13px; padding: 4px 4px; }
+    .pipe .pa { font-size: 13px; }
+    .pipe .marker { width: 10px; height: 10px; left: -5px; }
+    .pipe .pm { margin-left: 4px; }
+    #modelStrip #play { width: 48px; height: 48px; font-size: 20px; }
+    #stepBack, #stepFwd, #netToggle { padding: 6px 9px; }
   }
+  /* ▶ (play the bending through the layers): round, glowing, softly pulsing until it is pressed */
+  #play { width: 40px; height: 40px; padding: 0 0 0 2px; flex: none; border-radius: 50%; font-size: 17px; line-height: 1;
+    box-shadow: 0 0 0 3px rgba(31, 111, 235, 0.25), 0 4px 16px rgba(31, 111, 235, 0.4); animation: playPulse 2.4s ease-in-out infinite; }
+  #play.on { padding-left: 0; animation: none; }
+  #play:hover { box-shadow: 0 0 0 4px rgba(31, 111, 235, 0.4), 0 4px 20px rgba(31, 111, 235, 0.55); }
+  @keyframes playPulse { 50% { box-shadow: 0 0 0 7px rgba(31, 111, 235, 0.08), 0 4px 22px rgba(31, 111, 235, 0.55); } }
+  @media (prefers-reduced-motion: reduce) { #play { animation: none; } }
   #drawer { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); max-height: 46vh; border-top: 1px solid var(--line);
     background: var(--panel); animation: wzRise 0.3s var(--wz-ease, ease) backwards; }
   #drawer .col { overflow-y: auto; padding: 10px 14px 14px; border-left: 1px solid var(--line); scrollbar-color: #30363d transparent; scrollbar-width: thin; }
@@ -371,6 +399,7 @@
     .pipe .pa { display: none; }
     .ms-train { gap: 5px; padding-left: 6px; }
     #trainPlay { padding: 6px 9px; }
+    #play { width: 36px; height: 36px; font-size: 15px; }
     #drawerBtn { padding: 6px 10px; }
     .lbl-model { display: none; }
   }
@@ -382,8 +411,8 @@
     .wz-brand { display: none; }
     #modelStrip { gap: 8px; padding: 6px 8px; }
     .ms-train { padding-left: 8px; }
-    #timeline { width: calc(100% - 24px); bottom: 70px; }
-    #gizmo { bottom: 124px; }
+    #bendBtn { font-size: 14px; padding: 9px 16px; bottom: 12px; }
+    #gizmo { bottom: 64px; }
     #tlStack { max-width: calc(100% - 110px); }      /* leaves room for View ▾ */
     #infoBox { font-size: 11px; padding: 4px 8px; }
     #infoBox .fold-body { max-height: 42vh; }
@@ -572,7 +601,7 @@
 </head>
 <body>
 <header>
-  <h1><span class="lbl-long">Neural </span>Space Deformation</h1>
+  <h1><span class="lbl-long">Neural Nets </span>Space Bending</h1>
   <a class="byline hdr-wide" href="https://github.com/writerforight" target="_blank" rel="noopener">by Eren Can Almaz</a>
   <span class="seg" data-tip="Dimension of the input and output space. 3D uses Three.js; objects are cleared when switching.">
     <button id="dim2" class="on">2D</button><button id="dim3">3D</button>
@@ -641,14 +670,8 @@
       <svg id="gizmo" class="hidden" width="84" height="84" viewBox="0 0 84 84" aria-label="Axes of the tilted view"></svg>
       <button id="toolChip" class="hidden" data-tip="Back to the normal mode (pan the view)."></button>
 
-      <!-- training timeline, like a video player's bar: the loss of the whole run; drag to go back in time -->
-      <div id="timeline" class="hidden">
-        <button id="replayBtn" data-tip="Replay the training from the start, like a video.">⏵</button>
-        <span class="tl-label">Training</span>
-        <canvas id="lossSpark" data-tip="The loss of every training step (log scale). Drag to see the network at an earlier step."></canvas>
-        <span id="lossVal" class="tag"></span>
-        <button id="liveBtn" class="hidden" data-tip="Back to the current weights.">● live</button>
-      </div>
+      <!-- after training: one big, plain button that sends the space through the trained network, layer by layer -->
+      <button id="bendBtn" class="primary hidden" data-tip="Send the space through the trained network, layer by layer (Space).">▶ Watch the trained network bend space</button>
 
       <!-- top right: how to look -->
       <div class="anchor tr">
@@ -941,6 +964,7 @@
       <canvas id="netCanvas"></canvas>
     </div>
     <div id="modelStrip">
+      <div class="ms-row">
       <div class="ms-layers">
         <button id="play" class="primary" data-tip="Animate through the layers (Space).">▶</button>
         <div id="pipe" class="pipe" data-tip="The network as the path a point travels. Click a step to go there, drag to scrub, ⓘ inspects a layer."></div>
@@ -953,6 +977,16 @@
       <div class="ms-train">
         <button id="trainPlay" class="primary" data-tip="Start / pause training (key T).">▶ Train</button>
         <button id="drawerBtn" data-tip="Network, goal and training settings."><span class="lbl-model">Model </span>▲</button>
+      </div>
+      </div>
+      <!-- training history, like a video player's bar: the loss of the whole run; drag to go back in time.
+           The view keeps showing the layer you are on, so ⏵ shows how training changed that layer. -->
+      <div id="timeline" class="hidden">
+        <button id="replayBtn" data-tip="Replay the training: how the layer you are viewing changed, step by step.">⏵</button>
+        <span class="tl-label">History</span>
+        <canvas id="lossSpark" data-tip="The loss of every training step (log scale). Drag to see the network at an earlier step."></canvas>
+        <span id="lossVal" class="tag"></span>
+        <button id="liveBtn" class="hidden" data-tip="Back to the current weights.">● live</button>
       </div>
     </div>
   </main>
@@ -968,7 +1002,7 @@
     <div><p data-l="4">…until every class has its own place.</p></div>
   </div>
   <div class="intro-end">
-    <h2>Neural Space Deformation</h2>
+    <h2>Neural Nets Space Bending</h2>
     <p>Watch a neural network bend space — live, in your browser.</p>
     <p class="intro-by">by Eren Can Almaz</p>
     <div class="intro-btns"><button id="introTry" class="primary">Try it yourself</button><button id="introGuide">Guided tour</button></div>
@@ -980,7 +1014,7 @@
 <!-- ======================= guided start (src/wizard.js) ======================= -->
 <div id="wizard" class="hidden">
   <div class="wz-top">
-    <span class="wz-brand">Neural Space Deformation</span>
+    <span class="wz-brand">Neural Nets Space Bending</span>
     <button id="wzBack" class="wz-link hidden">← Back</button>
     <nav id="wzSteps">
       <button data-goto="dimension"><span class="n">1</span>Dimension</button><span class="sep">›</span>
@@ -993,8 +1027,8 @@
   </div>
   <div class="wz-stage">
     <section class="wz-screen wz-intro" data-step="intro">
-      <h2>Neural Space Deformation</h2>
-      <p class="lead">Watch a small neural network bend space, layer by layer, and see how training reshapes it.</p>
+      <h2>Neural Nets Space Bending</h2>
+      <p class="lead">Watch a small neural network bend space, layer by layer, and see how training reshapes it. Layers wider than 2D or 3D are shown through PCA, their most important directions.</p>
       <div class="wz-actions">
         <button id="wzStart" class="primary">Start the guided demo</button>
         <button id="wzSkip">I know how to use it</button>
