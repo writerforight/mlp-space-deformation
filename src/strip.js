@@ -4,7 +4,7 @@
 
    Every half of a block is one stage of the animation (W = the linear step, the right half = the
    activation).  Click a stage to go there, drag along the strip to scrub, ⓘ opens the layer inspector.
-   A marker shows where the view is right now, also between stages.  On a phone-wide screen the strip is
+   A line under the strip grows to where the view is right now, also between stages.  On a phone-wide screen the strip is
    compact — In · 1 · 2 · … · Out, one button per layer (its output); tapping the current layer again opens
    its inspector, and dragging along the strip still passes through every stage.  Once there is training, a video-style
    bar right of Train shows the loss of the whole run: drag on it to see the network at an earlier step,
@@ -202,7 +202,8 @@
       const t = App.t, n = centers.length - 1;
       const i = Math.min(n - 1, Math.floor(t)), u = t - i;
       const x = n === 0 ? centers[0] : centers[i] + u * (centers[Math.min(n, i + 1)] - centers[i]);
-      pipe.querySelector('.marker').style.transform = `translateX(${x}px)`;
+      const line = pipe.querySelector('.marker');      // the line grows from Input as the space moves through the network
+      line.style.left = `${centers[0]}px`; line.style.width = `${Math.max(0, x - centers[0])}px`;
       const s = Math.round(t), near = Math.abs(t - s) < 0.02;
       pipe.querySelectorAll('.pn[data-stage]').forEach((b) => {
         const k = b.dataset.stage === 'out' ? n : +b.dataset.stage;

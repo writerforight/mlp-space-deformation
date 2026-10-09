@@ -168,8 +168,8 @@
   .pipe .pa { color: var(--line); font-size: 11px; }
   .pipe .pm { display: inline-flex; gap: 2px; margin-left: 8px; }
   .pipe .pm button { padding: 2px 8px; }
-  .pipe .marker { position: absolute; left: -4px; bottom: 1px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent);
-    box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.25); pointer-events: none; }
+  .pipe .marker { position: absolute; left: 0; bottom: 2px; width: 0; height: 3px; border-radius: 2px; background: var(--accent);
+    box-shadow: 0 0 6px rgba(88, 166, 255, 0.6); pointer-events: none; }
   button.mini { padding: 4px 7px; }
   #gizmo { position: absolute; right: 12px; bottom: 14px; z-index: 5; background: rgba(13, 17, 23, 0.8); border: 1px solid var(--line);
     border-radius: 10px; font-family: ui-monospace, monospace; pointer-events: none; }
@@ -206,24 +206,13 @@
   #lossNow b { font-size: 17px; font-weight: 650; font-variant-numeric: tabular-nums; color: var(--text); }
   #drawerBtn.on { background: var(--panel2); border-color: var(--accent); }
   @media (min-width: 821px) {   /* desktop: Train and Model sit in the centre, right after the network, and stand out */
-    #modelStrip { justify-content: center; gap: 12px; }
+    #modelStrip { justify-content: center; gap: 10px; }
     .ms-layers { flex: 0 1 auto; }
-    .ms-train { gap: 8px; padding-left: 14px; }
+    .ms-train { gap: 8px; padding-left: 10px; }
     #trainPlay { min-width: 108px; padding: 8px 16px; font-size: 15px; font-weight: 650;
       box-shadow: 0 0 0 3px rgba(31, 111, 235, 0.22), 0 4px 16px rgba(31, 111, 235, 0.35); }
     #drawerBtn { padding: 8px 14px; font-size: 14px; font-weight: 600; border-color: var(--accent); }
-    /* the network you play through: bigger stages, a big round ▶ */
-    .pipe { gap: 3px; padding: 8px 2px 12px; }
-    .pipe .pn { padding: 7px 9px; font-size: 13.5px; }
-    .pipe .pb .pn { padding: 7px 5px; }
-    .pipe .pb { border-radius: 10px; padding: 3px; }
-    .pipe .pb .pn.s { font-size: 12px; }
-    .pipe .pi { font-size: 13px; padding: 4px 4px; }
-    .pipe .pa { font-size: 13px; }
-    .pipe .marker { width: 10px; height: 10px; left: -5px; }
-    .pipe .pm { margin-left: 4px; }
-    #modelStrip #play { width: 48px; height: 48px; font-size: 20px; }
-    #stepBack, #stepFwd, #netToggle { padding: 6px 9px; }
+    .pipe { gap: 2px; }
   }
   /* ▶ (play the bending through the layers): round, glowing, softly pulsing until it is pressed */
   #play { width: 40px; height: 40px; padding: 0 0 0 2px; flex: none; border-radius: 50%; font-size: 17px; line-height: 1;
@@ -403,9 +392,13 @@
     .pipe .pa { display: none; }
     .ms-train { gap: 5px; padding-left: 6px; }
     #trainPlay { padding: 6px 9px; }
-    #play { width: 36px; height: 36px; font-size: 15px; }
-    #lossNow { display: none; }                      /* phone: the loss is in the history row */
-    #lossVal { font-size: 12px; color: var(--text); }
+    /* phone: as it was — a plain ▶, the history bar floating above the strip, no big ▶ on the view */
+    #play { width: auto; height: auto; padding: 4px 10px; border-radius: 6px; font-size: inherit; line-height: inherit; box-shadow: none; animation: none; }
+    #lossNow, #bendBtn { display: none !important; }      /* the loss is in the history bar */
+    #modelStrip { position: relative; }
+    #timeline { position: absolute; left: 12px; right: 12px; bottom: calc(100% + 70px); z-index: 5; flex: none; justify-content: flex-start;
+      padding: 6px 12px; border-radius: 12px; background: rgba(22, 27, 34, 0.92); border: 1px solid var(--line); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35); }
+    #timeline #lossSpark { flex: 1; }
     #drawerBtn { padding: 6px 10px; }
     .lbl-model { display: none; }
   }
@@ -419,6 +412,7 @@
     .ms-train { padding-left: 8px; }
     #bendBtn { font-size: 14px; padding: 9px 16px; bottom: 12px; }
     #gizmo { bottom: 64px; }
+    body.has-timeline #gizmo { bottom: 124px; }
     #tlStack { max-width: calc(100% - 110px); }      /* leaves room for View ▾ */
     #infoBox { font-size: 11px; padding: 4px 8px; }
     #infoBox .fold-body { max-height: 42vh; }
