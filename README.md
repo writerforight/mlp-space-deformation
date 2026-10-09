@@ -42,8 +42,9 @@ One big view; everything else opens on demand, and one panel at a time (✕, Esc
 - **The strip at the bottom is the network**: `Input ▸ [W₁ | tanh] ▸ … ▸ Output`. Click a step to go there,
   drag along the strip to scrub, ⓘ inspects a layer, − / ＋ change the depth. ▶ Train sits on the right;
   **Model ▲** opens network | goal | training settings.
+- **Loss**: always shown right of Train — the current loss of the weights in view, live while training.
 - **After training**: a big ▶ on the view plays the trained network, layer by layer. The **history** bar
-  in the strip (under the network, right of Train on wide screens) shows the loss of the whole run. Drag on it
+  in the strip (under the network, right of Train on very wide screens) shows the loss of the whole run. Drag on it
   to see the network at any earlier step, ⏵ replays how training changed the layer in view, ● live returns;
   training from an old step continues from there.
 - **Tools**: click the active tool again, the tool badge on the view, or Esc to go back to panning; the

@@ -1460,6 +1460,12 @@
   function updateTrainStatus(msg) {
     const el = $('trainStatus'), T = trainer;
     $('trainPlay').textContent = training ? '⏸ Pause' : '▶ Train';
+    // the loss next to Train: the last training step while it runs, else the loss of the weights in view
+    $('lossNow').classList.toggle('hidden', !(T && T.tasks.length));
+    if (T && T.tasks.length) {
+      const L = training && T.lossHistory.length ? T.lossHistory[T.lossHistory.length - 1] : T.totalLoss();
+      $('lossNowVal').textContent = Number.isFinite(L) ? (L >= 1000 ? L.toExponential(1) : L.toPrecision(3)) : '—';
+    }
     if (msg) { el.textContent = msg; return; }
     if (!T) return;
     const parts = [`step ${T.step_}`];
@@ -2812,7 +2818,7 @@
         training = false;
         net.theta[off] = v;
         if (S.net.homeo) NN.clampSingularValues(net, HOMEO_FLOOR);
-        netVersion++; invalidate(); pushHistory(); inspect.key = '';
+        netVersion++; invalidate(); pushHistory(); inspect.key = ''; updateTrainStatus();
         flashHint(`${c.kind === 'W' ? `W[${c.i + 1}][${c.j + 1}]` : `b[${c.i + 1}]`} of layer ${inspect.layer} set to ${v} — the deformation is redrawn.`);
       };
       inp.addEventListener('keydown', (k) => { if (k.key === 'Enter') finish(true); if (k.key === 'Escape') finish(false); });

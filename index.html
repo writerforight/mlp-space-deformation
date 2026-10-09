@@ -187,7 +187,7 @@
   .ms-row { display: flex; align-items: center; gap: inherit; justify-content: inherit; flex: 1 1 auto; min-width: 0; }   /* network + Train never split */
   #timeline { display: flex; align-items: center; justify-content: center; gap: 8px; flex: 1 0 100%; min-width: 0; }
   #timeline #lossSpark { flex: 0 1 420px; }
-  @media (min-width: 1700px) {
+  @media (min-width: 2000px) {
     #timeline { flex: 0 1 340px; padding-left: 18px; border-left: 1px solid var(--line); }
     #timeline #lossSpark { flex: 1; }
   }
@@ -200,18 +200,22 @@
   #lossVal { min-width: 70px; text-align: right; font-variant-numeric: tabular-nums; }
   #lossVal { font-size: 10px; font-variant-numeric: tabular-nums; }
   .ms-train { display: flex; align-items: center; gap: 8px; padding-left: 14px; border-left: 1px solid var(--line); }
+  /* the current loss, always in sight next to Train */
+  #lossNow { display: inline-flex; flex-direction: column; align-items: flex-start; line-height: 1.15; min-width: 56px; }
+  #lossNow .ln-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+  #lossNow b { font-size: 17px; font-weight: 650; font-variant-numeric: tabular-nums; color: var(--text); }
   #drawerBtn.on { background: var(--panel2); border-color: var(--accent); }
   @media (min-width: 821px) {   /* desktop: Train and Model sit in the centre, right after the network, and stand out */
-    #modelStrip { justify-content: center; gap: 18px; }
+    #modelStrip { justify-content: center; gap: 12px; }
     .ms-layers { flex: 0 1 auto; }
-    .ms-train { gap: 10px; padding-left: 22px; }
-    #trainPlay { min-width: 124px; padding: 8px 20px; font-size: 15px; font-weight: 650;
+    .ms-train { gap: 8px; padding-left: 14px; }
+    #trainPlay { min-width: 108px; padding: 8px 16px; font-size: 15px; font-weight: 650;
       box-shadow: 0 0 0 3px rgba(31, 111, 235, 0.22), 0 4px 16px rgba(31, 111, 235, 0.35); }
     #drawerBtn { padding: 8px 14px; font-size: 14px; font-weight: 600; border-color: var(--accent); }
     /* the network you play through: bigger stages, a big round ▶ */
-    .pipe { gap: 4px; padding: 8px 2px 12px; }
-    .pipe .pn { padding: 7px 10px; font-size: 13.5px; }
-    .pipe .pb .pn { padding: 7px 6px; }
+    .pipe { gap: 3px; padding: 8px 2px 12px; }
+    .pipe .pn { padding: 7px 9px; font-size: 13.5px; }
+    .pipe .pb .pn { padding: 7px 5px; }
     .pipe .pb { border-radius: 10px; padding: 3px; }
     .pipe .pb .pn.s { font-size: 12px; }
     .pipe .pi { font-size: 13px; padding: 4px 4px; }
@@ -400,6 +404,8 @@
     .ms-train { gap: 5px; padding-left: 6px; }
     #trainPlay { padding: 6px 9px; }
     #play { width: 36px; height: 36px; font-size: 15px; }
+    #lossNow { display: none; }                      /* phone: the loss is in the history row */
+    #lossVal { font-size: 12px; color: var(--text); }
     #drawerBtn { padding: 6px 10px; }
     .lbl-model { display: none; }
   }
@@ -977,6 +983,7 @@
       <div class="ms-train">
         <button id="trainPlay" class="primary" data-tip="Start / pause training (key T).">▶ Train</button>
         <button id="drawerBtn" data-tip="Network, goal and training settings."><span class="lbl-model">Model </span>▲</button>
+        <span id="lossNow" class="hidden" data-tip="Loss: how far the network is from its goal right now (lower is better). Training pushes it down."><span class="ln-label">Loss</span><b id="lossNowVal">–</b></span>
       </div>
       </div>
       <!-- training history, like a video player's bar: the loss of the whole run; drag to go back in time.
