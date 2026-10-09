@@ -197,6 +197,7 @@
   #timeline #replayBtn { width: 24px; height: 24px; font-size: 11px; }
   #timeline #lossSpark { flex: none; width: 90px; min-width: 0; height: 24px; }
   #timeline #liveBtn { padding: 2px 6px; font-size: 11px; }
+  #tlClose { display: none; }
   @media (min-width: 821px) and (max-width: 1599px) {   /* room for the loss and history: no ▸ arrows, − / ＋ live in Model ▲ */
     .pipe .pa, .pipe .pm { display: none; }
     #timeline #lossSpark { width: 68px; }
@@ -425,6 +426,8 @@
     #timeline #replayBtn { width: 30px; height: 30px; font-size: inherit; }
     #timeline #lossSpark { flex: 1; width: auto; height: 30px; }
     #timeline #liveBtn { padding: 4px 10px; font-size: inherit; }
+    #tlClose { display: inline-block; border: none; background: none; color: var(--muted); padding: 4px 6px; }
+    #tlClose:hover { color: var(--text); }
     #gizmo { bottom: 64px; }
     body.has-timeline #gizmo { bottom: 124px; }
     #tlStack { max-width: calc(100% - 110px); }      /* leaves room for View ▾ */
@@ -1000,6 +1003,7 @@
           <canvas id="lossSpark" data-tip="The loss of every training step (log scale). Drag to see the network at an earlier step."></canvas>
           <span id="lossVal" class="tag"></span>
           <button id="liveBtn" class="hidden" data-tip="Back to the current weights.">● live</button>
+          <button id="tlClose" class="mini" aria-label="Close" data-tip="Hide the history; ▶ Train brings it back.">✕</button>
         </div>
       </div>
       </div>

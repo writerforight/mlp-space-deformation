@@ -417,6 +417,15 @@ def check_narrow_screen(b):
     b.open()
     r = b.js("const r=document.getElementById('modelStrip').getBoundingClientRect(); return [r.bottom, innerHeight, document.documentElement.scrollWidth, innerWidth]")
     assert r[0] <= r[1] + 1 and r[2] <= r[3], r
+    # the floating history bar: ✕ hides it, ▶ Train brings it back
+    b.set('target', 'classify', 'change')
+    b.train(2)
+    vis = "return !document.getElementById('timeline').classList.contains('hidden')"
+    assert b.js(vis)
+    b.js("document.getElementById('tlClose').click()"); time.sleep(0.3)
+    assert not b.js(vis)
+    b.train(1)
+    assert b.js(vis)
 
 
 CHECKS = [check_guided_start, check_skip_guide_draws_3d, check_intro, check_sound, check_guided_goals_and_tour, check_shell_panels, check_strip, check_objects, check_goals, check_default_task_and_classes, check_info_box, check_touch_gestures,
