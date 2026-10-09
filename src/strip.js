@@ -116,19 +116,18 @@
 
   // ---- training timeline: the loss over all steps; drag on it to watch the network at an earlier step -----
   const spark = $('lossSpark');
-  // narrow screens: the bar floats over the view, so ✕ hides it until ▶ Train is pressed again
-  const narrow = window.matchMedia('(max-width: 820px)');
+  // ✕ hides the bar until ▶ Train is pressed again
   let tlClosed = false;
   $('tlClose').onclick = () => { stopReplay(); if (App.viewIdx !== null) App.backToLive(); tlClosed = true; sparkKey = ''; };
   $('trainPlay').addEventListener('click', () => { tlClosed = false; sparkKey = ''; });
   let sparkKey = '';
   function drawSpark() {
     const T = App.trainer, hist = T ? T.lossHistory : [], steps = App.historySteps, vi = App.viewIdx;
-    const key = `${hist.length}|${spark.clientWidth}|${vi}|${steps.length}|${tlClosed && narrow.matches}`;
+    const key = `${hist.length}|${spark.clientWidth}|${vi}|${steps.length}|${tlClosed}`;
     if (key === sparkKey) return;
     sparkKey = key;
     $('liveBtn').classList.toggle('hidden', vi === null);
-    const show = steps.length >= 2 && hist.length >= 2 && !(tlClosed && narrow.matches);   // once there is training to watch
+    const show = steps.length >= 2 && hist.length >= 2 && !tlClosed;   // once there is training to watch
     $('timeline').classList.toggle('hidden', !show);
     document.body.classList.toggle('has-timeline', show);
     const w = spark.clientWidth, h = spark.clientHeight, dpr = window.devicePixelRatio || 1;
