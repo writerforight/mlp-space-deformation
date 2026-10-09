@@ -4,7 +4,8 @@
 
    Every half of a block is one stage of the animation (W = the linear step, the right half = the
    activation).  Click a stage to go there, drag along the strip to scrub, ⓘ opens the layer inspector.
-   A line under the strip grows to where the view is right now, also between stages.  On a phone-wide screen the strip is
+   A line under the strip grows to where the view is right now, also between stages; its knob can be dragged,
+   and a click on the line jumps there.  On a phone-wide screen the strip is
    compact — In · 1 · 2 · … · Out, one button per layer (its output); tapping the current layer again opens
    its inspector, and dragging along the strip still passes through every stage.  Once there is training, a video-style
    bar right of Train shows the loss of the whole run: drag on it to see the network at an earlier step,
@@ -31,7 +32,7 @@
       net.acts.forEach((a, l) => {
         h += `<span class="pa">·</span><button class="pn c" data-stage="${2 * l + 2}" data-layer="${l + 1}" data-tip="Layer ${l + 1}: W${l + 1} a + b${l + 1}, then ${a === 'identity' ? 'linear' : a}. Tap again to inspect it.">${l + 1}</button>`;
       });
-      pipe.innerHTML = h + '<span class="pa">·</span><button class="pn io" data-stage="out">Out</button><div class="marker"></div>';
+      pipe.innerHTML = h + '<span class="pa">·</span><button class="pn io" data-stage="out">Out</button><div class="track" data-tip="Click to go there; drag the knob to move through the network."></div><div class="marker"></div><div class="knob"></div>';
       measure();
       return;
     }
@@ -42,7 +43,7 @@
         <button class="pn w" data-stage="${2 * l + 1}" data-tip="Layer ${l + 1}, linear step: z = W${l + 1} a + b${l + 1} (${net.dims[l]}→${net.dims[l + 1]})">W${sub(l + 1)}</button><button class="pn s" data-stage="${2 * l + 2}" data-tip="Layer ${l + 1}, activation: a = ${a}(z)">${a === 'identity' ? 'linear' : a}</button><button class="pi" data-layer="${l + 1}" data-tip="Inspect layer ${l + 1}: weights, activation, history">ⓘ</button></span>`;
       if (last) h += '<span class="pa">▸</span><button class="pn io" data-stage="out">Output</button>';
     });
-    h += `<span class="pm"><button id="layerMinus" data-tip="Remove the last layer">−</button><button id="layerPlus" data-tip="Add a layer">＋</button></span><div class="marker"></div>`;
+    h += `<span class="pm"><button id="layerMinus" data-tip="Remove the last layer">−</button><button id="layerPlus" data-tip="Add a layer">＋</button></span><div class="track" data-tip="Click to go there; drag the knob to move through the network."></div><div class="marker"></div><div class="knob"></div>`;
     pipe.innerHTML = h;
     $('layerMinus').disabled = net.nLayers <= 1;
     $('layerPlus').disabled = net.nLayers >= 8;
@@ -58,6 +59,8 @@
     const mid = (el) => { const r = el.getBoundingClientRect(); return r.left + r.width / 2 - box.left + pipe.scrollLeft; };
     const known = new Map([...pipe.querySelectorAll('.pn[data-stage]')].filter((b) => b.dataset.stage !== 'out').map((b) => [+b.dataset.stage, mid(b)]));
     centers = [...Array(2 * App.net.nLayers + 1)].map((_, k) => known.get(k) ?? (known.get(k - 1) + known.get(k + 1)) / 2);
+    const track = pipe.querySelector('.track');               // the whole way, Input → Output
+    if (track) { track.style.left = `${centers[0] - 6}px`; track.style.width = `${centers[centers.length - 1] - centers[0] + 12}px`; }
   }
 
   function stageAtX(x) {
@@ -94,6 +97,11 @@
     if (e.target.closest('.pi, .pm')) return;
     drag = { x0: e.clientX };
     dragged = false;
+    if (e.target.closest('.track, .knob')) {                  // the line: jump to the click, then drag the knob
+      dragged = true;
+      const box = pipe.getBoundingClientRect();
+      App.scrubTo(stageAtX(e.clientX - box.left + pipe.scrollLeft));
+    }
   });
   window.addEventListener('pointermove', (e) => {
     if (!drag) return;
@@ -204,6 +212,7 @@
       const x = n === 0 ? centers[0] : centers[i] + u * (centers[Math.min(n, i + 1)] - centers[i]);
       const line = pipe.querySelector('.marker');      // the line grows from Input as the space moves through the network
       line.style.left = `${centers[0]}px`; line.style.width = `${Math.max(0, x - centers[0])}px`;
+      pipe.querySelector('.knob').style.transform = `translateX(${x}px)`;
       const s = Math.round(t), near = Math.abs(t - s) < 0.02;
       pipe.querySelectorAll('.pn[data-stage]').forEach((b) => {
         const k = b.dataset.stage === 'out' ? n : +b.dataset.stage;

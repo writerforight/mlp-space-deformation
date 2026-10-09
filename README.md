@@ -44,7 +44,7 @@ One big view; everything else opens on demand, and one panel at a time (✕, Esc
   **Model ▲** opens network | goal | training settings.
 - **Loss**: always shown right of Train — the current loss of the weights in view, live while training.
 - **After training**: a big ▶ on the view plays the trained network, layer by layer. The **history** bar
-  (under the network, right of Train on very wide screens, floating above the strip on a phone) shows the loss of the whole run. Drag on it
+  (a small box right of the loss on a computer, floating above the strip on a phone) shows the loss of the whole run. Drag on it
   to see the network at any earlier step, ⏵ replays how training changed the layer in view, ● live returns;
   training from an old step continues from there.
 - **Tools**: click the active tool again, the tool badge on the view, or Esc to go back to panning; the

@@ -203,6 +203,20 @@ def check_strip(b):
     assert n == [n0 + 1, n0 + 1], n
     b.click('#layerMinus'); time.sleep(0.4)
     assert b.js('return __app.net.nLayers') == n0
+    # the line under the strip: a click jumps there, the knob drags along and sits at the end of the blue part
+    b.js("""const tr=document.querySelector('.pipe .track'),r=tr.getBoundingClientRect(),y=r.top+r.height/2;
+      const E=(t,el,x)=>el.dispatchEvent(new PointerEvent(t,{bubbles:true,clientX:x,clientY:y,pointerId:1}));
+      E('pointerdown',tr,r.left+r.width/2); E('pointerup',window,r.left+r.width/2);""")
+    time.sleep(0.6)
+    t, n = b.js('return [__app.t, __app.traces.nStages - 1]')
+    assert abs(t - n / 2) < 0.6, (t, n)
+    b.js("""const k=document.querySelector('.pipe .knob'),r=k.getBoundingClientRect(),y=r.top+r.height/2,tr=document.querySelector('.pipe .track').getBoundingClientRect();
+      const E=(t,el,x)=>el.dispatchEvent(new PointerEvent(t,{bubbles:true,clientX:x,clientY:y,pointerId:1}));
+      E('pointerdown',k,r.left+6); for(let i=1;i<=6;i++) E('pointermove',window,r.left+6+(tr.right-6-r.left-6)*i/6); E('pointerup',window,tr.right-6);""")
+    time.sleep(0.6)
+    t, gap = b.js("""const k=document.querySelector('.pipe .knob').getBoundingClientRect(),m=document.querySelector('.pipe .marker').getBoundingClientRect();
+      return [__app.t, Math.abs(k.left+k.width/2-m.right)]""")
+    assert t > n - 0.3 and gap < 2, (t, gap)
 
 
 def check_objects(b):

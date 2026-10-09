@@ -168,8 +168,15 @@
   .pipe .pa { color: var(--line); font-size: 11px; }
   .pipe .pm { display: inline-flex; gap: 2px; margin-left: 8px; }
   .pipe .pm button { padding: 2px 8px; }
-  .pipe .marker { position: absolute; left: 0; bottom: 2px; width: 0; height: 3px; border-radius: 2px; background: var(--accent);
+  .pipe { padding-bottom: 15px; }
+  /* where the space is: a faint track Input → Output, the part already travelled in blue, a knob at its end */
+  .pipe .track { position: absolute; bottom: 0; height: 14px; cursor: pointer; }
+  .pipe .track::before { content: ''; position: absolute; left: 6px; right: 6px; bottom: 5px; height: 3px; border-radius: 2px; background: var(--line); }
+  .pipe .marker { position: absolute; left: 0; bottom: 5px; width: 0; height: 3px; border-radius: 2px; background: var(--accent);
     box-shadow: 0 0 6px rgba(88, 166, 255, 0.6); pointer-events: none; }
+  .pipe .knob { position: absolute; left: -6px; bottom: 0.5px; width: 12px; height: 12px; border-radius: 50%; background: var(--text);
+    border: 2px solid var(--accent); box-sizing: border-box; cursor: grab; box-shadow: 0 0 6px rgba(88, 166, 255, 0.6); }
+  .pipe .knob:active { cursor: grabbing; }
   button.mini { padding: 4px 7px; }
   #gizmo { position: absolute; right: 12px; bottom: 14px; z-index: 5; background: rgba(13, 17, 23, 0.8); border: 1px solid var(--line);
     border-radius: 10px; font-family: ui-monospace, monospace; pointer-events: none; }
@@ -182,20 +189,23 @@
   button.danger:disabled { color: var(--muted); border-color: var(--line); background: none; }
   #lossSpark { cursor: ew-resize; }
   #liveBtn { color: #ff6b6b; border-color: #ff6b6b; }
-  /* training history: its own row under the network and Train; on wide screens right of Train */
-  #modelStrip { flex-wrap: wrap; row-gap: 4px; }
-  .ms-row { display: flex; align-items: center; gap: inherit; justify-content: inherit; flex: 1 1 auto; min-width: 0; }   /* network + Train never split */
-  #timeline { display: flex; align-items: center; justify-content: center; gap: 8px; flex: 1 0 100%; min-width: 0; }
-  #timeline #lossSpark { flex: 0 1 420px; }
-  @media (min-width: 2000px) {
-    #timeline { flex: 0 1 340px; padding-left: 18px; border-left: 1px solid var(--line); }
-    #timeline #lossSpark { flex: 1; }
+  /* training history: a small box next to the loss */
+  #modelStrip { position: relative; }
+  .ms-row { display: flex; align-items: center; gap: inherit; justify-content: inherit; flex: 1 1 auto; min-width: 0; }
+  #timeline { display: flex; align-items: center; gap: 6px; flex: none; padding: 3px 6px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel2); }
+  #timeline .tl-label, #timeline #lossVal { display: none; }
+  #timeline #replayBtn { width: 24px; height: 24px; font-size: 11px; }
+  #timeline #lossSpark { flex: none; width: 90px; min-width: 0; height: 24px; }
+  #timeline #liveBtn { padding: 2px 6px; font-size: 11px; }
+  @media (min-width: 821px) and (max-width: 1599px) {   /* room for the loss and history: no ▸ arrows, − / ＋ live in Model ▲ */
+    .pipe .pa, .pipe .pm { display: none; }
+    #timeline #lossSpark { width: 68px; }
   }
   /* the big ▶ on the view after training: plays the layers, not the training */
   #bendBtn { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 5; padding: 10px 22px; border-radius: 24px;
     font-size: 15px; font-weight: 650; white-space: nowrap; box-shadow: 0 0 0 3px rgba(31, 111, 235, 0.25), 0 8px 28px rgba(31, 111, 235, 0.45); }
   #timeline .tl-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
-  #timeline #replayBtn { border-radius: 50%; width: 30px; height: 30px; padding: 0; background: var(--accent2); border-color: var(--accent); }
+  #timeline #replayBtn { border-radius: 50%; padding: 0; background: var(--accent2); border-color: var(--accent); }
   #lossSpark { flex: 1; min-width: 70px; height: 28px; display: block; }
   #lossVal { min-width: 70px; text-align: right; font-variant-numeric: tabular-nums; }
   #lossVal { font-size: 10px; font-variant-numeric: tabular-nums; }
@@ -395,10 +405,7 @@
     /* phone: as it was — a plain ▶, the history bar floating above the strip, no big ▶ on the view */
     #play { width: auto; height: auto; padding: 4px 10px; border-radius: 6px; font-size: inherit; line-height: inherit; box-shadow: none; animation: none; }
     #lossNow, #bendBtn { display: none !important; }      /* the loss is in the history bar */
-    #modelStrip { position: relative; }
-    #timeline { position: absolute; left: 12px; right: 12px; bottom: calc(100% + 70px); z-index: 5; flex: none; justify-content: flex-start;
-      padding: 6px 12px; border-radius: 12px; background: rgba(22, 27, 34, 0.92); border: 1px solid var(--line); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35); }
-    #timeline #lossSpark { flex: 1; }
+
     #drawerBtn { padding: 6px 10px; }
     .lbl-model { display: none; }
   }
@@ -411,6 +418,13 @@
     #modelStrip { gap: 8px; padding: 6px 8px; }
     .ms-train { padding-left: 8px; }
     #bendBtn { font-size: 14px; padding: 9px 16px; bottom: 12px; }
+    /* narrower screens: the history bar floats above the strip, as before */
+    #timeline { position: absolute; left: 12px; right: 12px; bottom: calc(100% + 70px); z-index: 5; gap: 10px;
+      padding: 6px 12px; border-radius: 12px; background: rgba(22, 27, 34, 0.92); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35); }
+    #timeline .tl-label, #timeline #lossVal { display: inline; }
+    #timeline #replayBtn { width: 30px; height: 30px; font-size: inherit; }
+    #timeline #lossSpark { flex: 1; width: auto; height: 30px; }
+    #timeline #liveBtn { padding: 4px 10px; font-size: inherit; }
     #gizmo { bottom: 64px; }
     body.has-timeline #gizmo { bottom: 124px; }
     #tlStack { max-width: calc(100% - 110px); }      /* leaves room for View ▾ */
@@ -978,16 +992,16 @@
         <button id="trainPlay" class="primary" data-tip="Start / pause training (key T).">▶ Train</button>
         <button id="drawerBtn" data-tip="Network, goal and training settings."><span class="lbl-model">Model </span>▲</button>
         <span id="lossNow" class="hidden" data-tip="Loss: how far the network is from its goal right now (lower is better). Training pushes it down."><span class="ln-label">Loss</span><b id="lossNowVal">–</b></span>
+        <!-- training history, like a video player's bar: the loss of the whole run; drag to go back in time.
+             The view keeps showing the layer you are on, so ⏵ shows how training changed that layer. -->
+        <div id="timeline" class="hidden">
+          <button id="replayBtn" data-tip="Replay the training: how the layer you are viewing changed, step by step.">⏵</button>
+          <span class="tl-label">History</span>
+          <canvas id="lossSpark" data-tip="The loss of every training step (log scale). Drag to see the network at an earlier step."></canvas>
+          <span id="lossVal" class="tag"></span>
+          <button id="liveBtn" class="hidden" data-tip="Back to the current weights.">● live</button>
+        </div>
       </div>
-      </div>
-      <!-- training history, like a video player's bar: the loss of the whole run; drag to go back in time.
-           The view keeps showing the layer you are on, so ⏵ shows how training changed that layer. -->
-      <div id="timeline" class="hidden">
-        <button id="replayBtn" data-tip="Replay the training: how the layer you are viewing changed, step by step.">⏵</button>
-        <span class="tl-label">History</span>
-        <canvas id="lossSpark" data-tip="The loss of every training step (log scale). Drag to see the network at an earlier step."></canvas>
-        <span id="lossVal" class="tag"></span>
-        <button id="liveBtn" class="hidden" data-tip="Back to the current weights.">● live</button>
       </div>
     </div>
   </main>
